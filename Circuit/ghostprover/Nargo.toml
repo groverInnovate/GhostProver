@@ -1,0 +1,6 @@
+[package]
+name = "ghostprover"
+type = "bin"
+authors = [""]
+
+[dependencies]
