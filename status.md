@@ -9,3 +9,6 @@
 2.  Wrote the Poseidon2 sponge hash as the Required version was not publicly available. The non Inclusion is checked via Sliding Window Algorithm. Wrote some tests for edge cases
 3. Proof Size and Time is sufficient for this project. 
 ###  Summary - v1 version of GhostProver Circuit is completed.
+
+* 23 April 2026 - 
+Wrote a Typescript Wrapper for calling the circuit from the Backend. It can generate proofs and verify them.

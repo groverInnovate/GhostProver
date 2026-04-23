@@ -1,0 +1,24 @@
+{
+  "name": "ghostprover",
+  "version": "0.1.0",
+  "description": "Privacy-preserving compliance attestation layer for AI inference - ZK proof of non-membership",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "sanity-test": "npx tsx src/sanity-test.ts",
+    "test:hashes": "npx tsx src/sanity-test.ts"
+  },
+  "dependencies": {
+    "@aztec/bb.js": "^4.2.0",
+    "@noir-lang/noir_js": "^1.0.0-beta.20",
+    "@noir-lang/noir_wasm": "^1.0.0-beta.20",
+    "@zkpassport/poseidon2": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.0"
+  }
+}
