@@ -16,7 +16,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { initBroker, pickService, ensureFunded } from './broker.js';
+import { ensureFunded, getBrokerConfig, initBroker, logBrokerContext, pickService } from './broker.js';
 
 const PROMPT = process.argv.slice(2).join(' ') ||
   'In one short sentence: what is a zero-knowledge proof?';
@@ -33,8 +33,11 @@ function tryParseZerogAuth(raw: string | null): unknown {
 }
 
 async function main() {
-  const { broker, wallet } = await initBroker();
+  const ctx = await initBroker();
+  const { broker, wallet } = ctx;
   console.log('[wallet]', await wallet.getAddress());
+  await logBrokerContext(ctx);
+  console.log('[config]', getBrokerConfig());
 
   const service = await pickService(broker);
   const providerAddress: string = service.provider;

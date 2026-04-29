@@ -7,6 +7,12 @@
   "scripts": {
     "inference": "tsx src/inference.ts",
     "attest": "tsx src/attestation.ts",
+    "list-services": "tsx src/list-services.ts",
+    "demo:verifier": "node ../scripts/write-solidity-verifier.mjs",
+    "demo:deploy": "node ../scripts/demo-deploy.mjs",
+    "demo:fixture": "node ../scripts/write-proof-fixture.mjs",
+    "demo:receipt": "node ../scripts/demo-receipt.mjs",
+    "demo:test": "node ../scripts/run-demo-tests.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

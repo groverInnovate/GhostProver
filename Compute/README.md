@@ -24,6 +24,7 @@ inference sub-account transfers.
 npm run inference             # end-to-end call, writes samples/inference-*.log.json
 npm run inference -- "Name three privacy-preserving compliance use cases."
 npm run attest                # dumps verifyService() attestation bundle to reports/
+npm run list-services         # prints broker-visible services and network context
 ```
 
 ## What gets captured
