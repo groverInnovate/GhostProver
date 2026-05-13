@@ -78,6 +78,12 @@ export async function pickService(broker: Ctx['broker']) {
     );
   }
 
+<<<<<<< HEAD
+=======
+  const services = await broker.inference.listService();
+  console.log(`[listService] found ${services.length} total services`);
+  
+>>>>>>> origin/main
   if (pinned) {
     const hit = services.find((s: any) => s.provider?.toLowerCase() === pinned.toLowerCase());
     if (!hit) {
@@ -88,7 +94,18 @@ export async function pickService(broker: Ctx['broker']) {
     }
     return hit;
   }
+  
+  // Log all services for debugging
+  console.log('[all services]', services.map((s: any) => ({ 
+    provider: s.provider, 
+    model: s.model, 
+    serviceType: s.serviceType,
+    url: s.url 
+  })));
+  
   const chatbots = services.filter((s: any) => (s.serviceType ?? s.serviceName ?? '').toLowerCase().includes('chat') || s.model);
+  console.log(`[chatbots filtered] ${chatbots.length} services`);
+  
   const match = chatbots.find((s: any) => (s.model ?? '').toLowerCase().includes(filter));
   if (!match) {
     console.error('No service matches filter. Available:', chatbots.map((s: any) => ({
