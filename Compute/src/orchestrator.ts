@@ -404,7 +404,19 @@ async function main() {
   console.log(JSON.stringify(result, null, 2));
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Only execute CLI when this module is the entry point, not when imported.
+const isMain = (() => {
+  try {
+    const argv1 = process.argv[1] ?? '';
+    return import.meta.url.endsWith(argv1.replace(/\\/g, '/').split('/').pop() ?? '');
+  } catch {
+    return false;
+  }
+})();
+
+if (isMain) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
