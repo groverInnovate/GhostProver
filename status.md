@@ -44,8 +44,32 @@
 | GhostProverRegistry.sol | ✅ Complete — 5 tests pass, 0G fields wired | P1 |
 | Verifier.sol (Honk) | ✅ Generated — do not edit | auto |
 | Local Anvil demo | ✅ Working — proof → deploy → receipt | P1 |
-| 0G Compute SDK wiring | 🔄 In progress — inference + attestation scripts written, TEE verify pending | P3 |
-| 0G Chain testnet deploy | ⬜ Not started | P2 |
-| 0G Storage integration | ⬜ Not started | P3 |
-| Orchestrator backend | ⬜ Not started | P3 |
+| 0G Compute SDK wiring | ✅ Mock + live inference, TEE verify helper | P3 |
+| 0G Chain testnet deploy | ✅ Deploy0GTestnet.s.sol ready | P2 |
+| 0G Storage integration | ✅ storage.ts (upload + Merkle root) | P3 |
+| Orchestrator backend | ✅ orchestrator.ts wires full pipeline | P3 |
 | React frontend | ⬜ Not started | P3 |
+
+---
+
+### 14 May 2026 (Phase 2 complete)
+1. **Toolchain pinned**: `nargo` 1.0.0-beta.18, `bb` CLI + `bb.js` 3.0.0-nightly.20260102, `noir_js` + `noir_wasm` 1.0.0-beta.18. Installed `bb` via `bbup -nv 1.0.0-beta.18`.
+2. **Fixed circuit**: `poseidon2_permutation(state)` → `poseidon2_permutation(state, 4)` (4 call sites). `nargo execute` passes. Self-test hash `0x2a7c9afe...` matches.
+3. **Fixed proof/verifier mismatch**: bb.js now passes `{ verifierTarget: 'evm' }` to `generateProof` and `getSolidityVerifier` → proof is 9792 bytes (306 fields × 32, logN=18) matching the Solidity verifier.
+4. **New artifacts** (`Compute/src/`):
+   - `mock-inference.ts` — generates realistic `samples/inference-*.log.json` with TEE attestation envelope.
+   - `bridge.ts` — Compute → Circuit: pads prompt/target, computes Poseidon2 hashes, writes Prover.toml.
+   - `storage.ts` — 0G Storage upload via `@0gfoundation/0g-storage-ts-sdk`, returns Merkle rootHash.
+   - `verify-attestation.ts` — parses zerogAuth envelope, recovers ECDSA signer, verifies request/response hashes.
+   - `orchestrator.ts` — full pipeline: inference → bridge → attestation verify → ZK proof → 0G Storage → on-chain receipt.
+5. **New artifacts** (`Chain/script/`):
+   - `Deploy0GTestnet.s.sol` — Foundry script for deploying HonkVerifier + GhostProverRegistry to 0G testnet, saves to `deployments/0g-testnet.json`.
+6. **All 5 Forge tests still pass** (Verifier.sol + GhostProverRegistry.sol).
+7. **End-to-end demo runs locally** on Anvil: proof gen ~6s, on-chain submission verified, tampered proofs rejected.
+
+**Issues:** None — all 5 tests green. Live 0G testnet deploy + storage upload pending a funded testnet wallet (low priority — uses same scripts as local).
+
+**Tomorrow's plan:**
+- Build React frontend (`Frontend/` — Vite + shadcn/ui).
+- Backend orchestrator endpoint: `POST /prove` → returns `{commitment, targetHash, proof, txHash, storageRoot}`.
+- Run live testnet demo end-to-end once wallet is funded.

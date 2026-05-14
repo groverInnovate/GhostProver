@@ -1,62 +1,93 @@
 # GhostProver — Compute
 
-Thin TypeScript harness around `@0glabs/0g-serving-broker` to do exactly what
-Day 1 calls for: run inference against **qwen-2.5-7b-instruct** on 0G testnet,
-capture the raw response body + `zerogAuth` signature header, and dump the TEE
-attestation object shape so Phase 2 (the on-chain verifier + audit bundle) has
-a known schema to bind to.
+Thin TypeScript harness around `@0glabs/0g-serving-broker` to run inference on
+the 0G Compute Network, capture the raw response + `zerogAuth` TEE attestation
+header, and feed the result into the Noir circuit via the **bridge**.
 
 ## Setup
 
 ```bash
 cd Compute
-cp .env.example .env          # then fill PRIVATE_KEY with a funded testnet key
-npm install                   # or pnpm i / yarn
+cp .env.example .env          # fill PRIVATE_KEY with a funded testnet key
+npm install
 ```
 
-Faucet: https://faucet.0g.ai — the wallet needs both gas and at least
-`INITIAL_DEPOSIT` (default 0.1) 0G credited into the Compute ledger for
-inference sub-account transfers.
+Faucet: https://faucet.0g.ai — wallet needs gas + at least `INITIAL_DEPOSIT`
+(default 1) 0G credited into the Compute ledger.
 
 ## Commands
 
 ```bash
-npm run inference             # end-to-end call, writes samples/inference-*.log.json
-npm run inference -- "Name three privacy-preserving compliance use cases."
-npm run attest                # dumps verifyService() attestation bundle to reports/
-npm run list-services         # prints broker-visible services and network context
+# --- Live inference (requires a live 0G testnet/mainnet provider) ---
+npm run inference             # writes samples/inference-*.log.json
+npm run inference -- "Your custom prompt here."
+npm run attest                # dumps verifyService() TEE attestation to reports/
+npm run list-services         # lists broker-visible services
+
+# --- Mock inference (no provider needed — same output shape as live) ---
+npm run inference:mock        # writes samples/inference-*.log.json  ← use this when testnet is down
+npm run inference:mock -- "Custom prompt"
+
+# --- Bridge: Compute → Circuit ---
+# Reads the latest samples/inference-*.log.json, computes Poseidon2 commitments,
+# writes Circuit/ghostprover/Prover.toml ready for `nargo execute`.
+npm run bridge -- --target "234567890123"
+npm run bridge -- --target "ssn-field" --prompt "Override prompt directly"
+npm run bridge -- --target "secret" --sample samples/inference-XYZ.log.json
 ```
 
-## What gets captured
+### Full end-to-end (mock path)
 
-`samples/inference-<ts>.log.json`:
+```bash
+npm run inference:mock && npm run bridge -- --target "234567890123"
+cd ../Circuit/ghostprover && nargo execute   # witness solved ✓
+```
 
-- `request.headers` — keys returned by `broker.inference.getRequestHeaders()`
-  (includes `zerogAuth`, signed per-request by the SDK).
-- `response.headers` — all response headers; TEE signature lives in
-  `zerogAuth` / `ZG-Res-Key` / `ZG-*`.
-- `zerogAuth.parsed` — best-effort decode of the response `zerogAuth` header
-  (raw → JSON → base64(JSON)). This is the enclave-signed envelope over
-  `{request_hash, response_hash, model_id, timestamp, signer}`.
-- `teeVerified` — result of `broker.inference.processResponse(provider, chatID)`
-  which handles the signature check internally (per the 0G docs note we do
-  **not** hand-parse the header for validation, just log its shape).
+## Architecture
 
-`reports/attestation-<provider>.json` (from `npm run attest`):
+```
+inference:mock  ──┐
+inference       ──┴──▶  samples/inference-<ts>.log.json
+                                │
+                             bridge.ts
+                                │
+                         Poseidon2 sponge (JS, matches Noir stdlib)
+                         Self-test: 0x2a7c9afe... ← verified against
+                         nargo test test_print_prover_hashes
+                                │
+                   Circuit/ghostprover/Prover.toml  (auto-generated)
+                                │
+                           nargo execute / nargo prove
+```
 
-- `signerVerification.allMatch` — TEE signer address on-chain matches enclave.
-- `composeVerification.passed` — docker-compose hash matches the expected build.
-- `dockerImages` — pinned image digests running inside the enclave.
-- Per-step reports from Intel / NVIDIA attestation flows live alongside it.
+## What gets captured in `samples/inference-*.log.json`
+
+- `mock: true` — present only for mock runs; absent for live runs.
+- `prompt` — the input text sent to the model.
+- `zerogAuth.parsed` — enclave-signed envelope: `{request_hash, response_hash,
+  model, provider, signer, timestamp, nonce, signature}`.
+- `teeVerified` — `broker.inference.processResponse()` result (TEE sig valid).
+- `chatID` — response ID used for `processResponse`.
+
+## Mainnet migration path
+
+`@0glabs/0g-serving-broker@0.4.4` has **hardcoded testnet contract addresses**.
+When mainnet Compute launches, either:
+
+1. Upgrade to a newer SDK version that auto-detects the chain, **OR**
+2. Pass mainnet contract addresses explicitly:
+   ```ts
+   createZGComputeNetworkBroker(wallet, LEDGER_CA, INFERENCE_CA, FINE_TUNING_CA)
+   ```
+   and set `ZG_RPC_URL=https://evmrpc.0g.ai` in `.env`.
+
+No other code changes needed — `inference.ts`, `mock-inference.ts`, and
+`bridge.ts` all read `ZG_RPC_URL` from `.env` and are network-agnostic.
 
 ## Next (Phase 2 hand-off)
 
-The JSON bundle under `samples/` is the input to:
-
-1. The Noir circuit's public-input binding (commitment = `Poseidon(prompt_bytes)`
-   must equal the TEE-attested `request_hash` after the agreed preimage rule).
+1. `Prover.toml` → `nargo prove` → `proof.json` + `public_inputs.json`
 2. `GhostProverRegistry.submitReceipt(proof, publicInputs, attestationBundle)`
-   on 0G Chain — `attestationBundle` = the `zerogAuth.parsed` object + provider
-   signer address verified via `processResponse`.
-3. The 0G Storage audit archive (whole log file uploaded, Merkle root anchored
-   in the `ComplianceReceiptIssued` event).
+   on 0G Chain — `attestationBundle` = `zerogAuth.parsed` + provider signer.
+3. 0G Storage audit archive: whole log uploaded, Merkle root anchored in the
+   `ComplianceReceiptIssued` event.

@@ -78,12 +78,6 @@ export async function pickService(broker: Ctx['broker']) {
     );
   }
 
-<<<<<<< HEAD
-=======
-  const services = await broker.inference.listService();
-  console.log(`[listService] found ${services.length} total services`);
-  
->>>>>>> origin/main
   if (pinned) {
     const hit = services.find((s: any) => s.provider?.toLowerCase() === pinned.toLowerCase());
     if (!hit) {

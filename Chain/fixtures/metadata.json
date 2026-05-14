@@ -3,7 +3,7 @@
   "target": "234567890123",
   "commitment": "0x2a277e180bee56db938abe077ad155ec417aa0cb998a24649e2afac447a8fac5",
   "targetHash": "0x19c70db02accdb8349beeda4c691bd93e3ea0226d47e97f8c2041d3a70be186c",
-  "proofBytes": 9536,
-  "proofTimeMs": 32661,
+  "proofBytes": 9792,
+  "proofTimeMs": 5975,
   "demoMode": true
 }
