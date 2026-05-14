@@ -8,13 +8,16 @@
   "scripts": {
     "build": "tsc",
     "sanity-test": "npx tsx src/sanity-test.ts",
-    "test:hashes": "npx tsx src/sanity-test.ts"
+    "test:hashes": "npx tsx src/sanity-test.ts",
+    "demo:fixture": "cd Compute && npm run demo:fixture",
+    "demo:test": "cd Compute && npm run demo:test"
   },
   "dependencies": {
-    "@aztec/bb.js": "^4.2.0",
-    "@noir-lang/noir_js": "^1.0.0-beta.20",
-    "@noir-lang/noir_wasm": "^1.0.0-beta.20",
-    "@zkpassport/poseidon2": "^0.6.0"
+    "@aztec/bb.js": "^3.0.0-nightly.20260102",
+    "@noir-lang/noir_js": "1.0.0-beta.18",
+    "@noir-lang/noir_wasm": "1.0.0-beta.18",
+    "@zkpassport/poseidon2": "^0.6.0",
+    "ethers": "6.13.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

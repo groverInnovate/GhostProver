@@ -4,10 +4,13 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { initBroker, pickService } from './broker.js';
+import { getBrokerConfig, initBroker, logBrokerContext, pickService } from './broker.js';
 
 async function main() {
-  const { broker } = await initBroker();
+  const ctx = await initBroker();
+  const { broker } = ctx;
+  await logBrokerContext(ctx);
+  console.log('[config]', getBrokerConfig());
   const service = await pickService(broker);
   const providerAddress: string = service.provider;
   console.log('[service]', { provider: providerAddress, model: service.model });

@@ -6,17 +6,35 @@
   "type": "module",
   "scripts": {
     "inference": "tsx src/inference.ts",
+    "inference:mock": "tsx src/mock-inference.ts",
+    "bridge": "tsx src/bridge.ts",
+    "orchestrate": "tsx src/orchestrator.ts",
+    "server": "tsx src/server.ts",
+    "storage": "tsx src/storage.ts",
+    "verify-attestation": "tsx src/verify-attestation.ts",
     "attest": "tsx src/attestation.ts",
+    "list-services": "tsx src/list-services.ts",
+    "demo:verifier": "node ../scripts/write-solidity-verifier.mjs",
+    "demo:deploy": "node ../scripts/demo-deploy.mjs",
+    "demo:fixture": "node ../scripts/write-proof-fixture.mjs",
+    "demo:receipt": "node ../scripts/demo-receipt.mjs",
+    "demo:test": "node ../scripts/run-demo-tests.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@0gfoundation/0g-storage-ts-sdk": "^1.2.9",
     "@0glabs/0g-serving-broker": "^0.4.0",
+    "@zkpassport/poseidon2": "^0.6.2",
+    "cors": "^2.8.6",
     "dotenv": "^16.4.5",
-    "ethers": "6.13.1"
+    "ethers": "6.13.1",
+    "express": "^5.2.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.14.0",
     "tsx": "^4.19.1",
-    "typescript": "^5.6.2",
-    "@types/node": "^20.14.0"
+    "typescript": "^5.6.2"
   }
 }

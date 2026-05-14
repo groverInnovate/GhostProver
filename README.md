@@ -72,6 +72,51 @@ bb write_vk -b ./target/ghostprover.json -o ./target --oracle_hash keccak
 bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol
 ```
 
+## Local receipt demo
+
+This repository now includes a **demo-mode** local receipt flow. It proves the
+ZK proof can be generated and verified on-chain locally, but it is **not** full
+0G integration yet.
+
+```bash
+# terminal 1
+anvil
+
+# terminal 2
+cd Compute
+npm run demo:deploy
+
+# terminal 3
+npm run demo:receipt
+```
+
+Generate a fresh proof fixture and run the local receipt tests with one command:
+
+```bash
+cd Compute
+npm run demo:test
+```
+
+The demo test flow covers:
+- valid proof emits `ComplianceReceiptIssued`
+- tampered proof is rejected
+- tampered commitment is rejected
+- tampered target hash is rejected
+
+## Demo limitations
+
+The local receipt demo is intentionally partial:
+
+- The prompt and target are hardcoded local sample inputs.
+- There is no live 0G provider in the flow.
+- There is no TEE attestation, `zerogAuth`, or `processResponse()` verification.
+- There is no 0G Storage upload or storage root.
+- The chain target is local Anvil, not 0G Chain.
+- The verifier artifact is reused from the checked-in Noir output.
+
+The missing integration step is the eventual binding between the proof
+commitment and a real TEE-attested request identity from 0G Compute.
+
 
 ## Project structure
 
@@ -86,6 +131,14 @@ bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol
 │   ├── Prover.toml       # Example inputs for local execution
 │   └── target/           # Auto-generated verification keys & Solidity Verifier
 └── package.json          # Node dependencies
+
+Chain/
+├── src/GhostProverRegistry.sol   # Demo-mode receipt registry
+├── script/DeployLocal.s.sol      # Local Anvil deployment script
+└── test/GhostProverRegistry.t.sol # Valid/tamper proof tests
+
+Compute/
+└── src/demo-receipt.ts           # Local proof-to-receipt demo driver
 ```
 
 ## License

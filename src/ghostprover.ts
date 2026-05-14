@@ -132,9 +132,10 @@ export async function generateProof(
     const startTime = Date.now();
     const { witness } = await noir.execute(circuitInputs);
 
-    // Generate proof
+    // Generate proof. verifierTarget: 'evm' ensures the proof format matches
+    // the Solidity verifier produced by `bb write_solidity_verifier -t evm`.
     console.log("[GhostProver] Generating proof...");
-    const proof = await backend.generateProof(witness);
+    const proof = await backend.generateProof(witness, { verifierTarget: "evm" });
     const proofTimeMs = Date.now() - startTime;
 
     console.log(`[GhostProver] Proof generated in ${proofTimeMs}ms`);
@@ -172,7 +173,7 @@ export async function verifyProof(
     const isValid = await backend.verifyProof({
       proof,
       publicInputs,
-    });
+    }, { verifierTarget: "evm" });
     console.log(`[GhostProver] Verification result: ${isValid}`);
     return isValid;
   } finally {

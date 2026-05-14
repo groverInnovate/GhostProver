@@ -62,7 +62,7 @@ fn poseidon2_hash_512(input: [Field; 512]) -> Field {
             for k in 0..3 {
                 state[k] += cache[k];
             }
-            state = std::hash::poseidon2_permutation(state);
+            state = std::hash::poseidon2_permutation(state, 4);
             cache = [0; 3];
             cache[0] = input[i];
             cache_size = 1;
@@ -78,7 +78,7 @@ fn poseidon2_hash_512(input: [Field; 512]) -> Field {
             state[k] += cache[k];
         }
     }
-    state = std::hash::poseidon2_permutation(state);
+    state = std::hash::poseidon2_permutation(state, 4);
     state[0]
 }
 
@@ -96,7 +96,7 @@ fn poseidon2_hash_32(input: [Field; 32]) -> Field {
             for k in 0..3 {
                 state[k] += cache[k];
             }
-            state = std::hash::poseidon2_permutation(state);
+            state = std::hash::poseidon2_permutation(state, 4);
             cache = [0; 3];
             cache[0] = input[i];
             cache_size = 1;
@@ -111,7 +111,7 @@ fn poseidon2_hash_32(input: [Field; 32]) -> Field {
             state[k] += cache[k];
         }
     }
-    state = std::hash::poseidon2_permutation(state);
+    state = std::hash::poseidon2_permutation(state, 4);
     state[0]
 }
 
