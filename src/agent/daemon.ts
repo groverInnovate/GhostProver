@@ -6,6 +6,7 @@ import { computeCommitment } from "../ghostprover.js";
 import {
   loadEffectiveRegistry,
   loadGhostProverConfig,
+  MAX_PROMPT_BYTES,
   publicConfig,
   resolvePolicyPatternIds,
   type EffectiveGhostProverConfig,
@@ -38,7 +39,16 @@ interface ScanResponse {
 }
 
 type SseClient = http.ServerResponse;
-const PROMPT_MAX_BYTES = 512;
+
+class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code = "BAD_REQUEST"
+  ) {
+    super(message);
+  }
+}
 
 /**
  * Start the local GhostProver compliance agent.
@@ -71,8 +81,11 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<http.Ser
     try {
       await route(req, res, state);
     } catch (err) {
-      sendJson(res, 500, {
-        error: (err as Error).message,
+      const error = err as Error;
+      const apiError = err instanceof ApiError ? err : new ApiError(500, error.message, "INTERNAL_ERROR");
+      sendJson(res, apiError.status, {
+        error: apiError.message,
+        code: apiError.code,
       });
     }
   });
@@ -112,7 +125,33 @@ async function route(
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "127.0.0.1"}`);
 
   if (req.method === "GET" && url.pathname === "/health") {
-    sendJson(res, 200, { ok: true, service: "ghostprover-daemon" });
+    sendJson(res, 200, {
+      ok: true,
+      service: "ghostprover-daemon",
+      maxPromptBytes: MAX_PROMPT_BYTES,
+    });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/v1/status") {
+    const jobs = state.store.listJobs();
+    const receipts = state.store.listReceipts();
+    sendJson(res, 200, {
+      ok: true,
+      service: "ghostprover-daemon",
+      maxPromptBytes: MAX_PROMPT_BYTES,
+      config: publicConfig(state.config, state.registry),
+      counts: {
+        jobs: jobs.length,
+        receipts: receipts.length,
+        byStatus: jobs.reduce<Record<string, number>>((acc, job) => {
+          acc[job.status] = (acc[job.status] ?? 0) + 1;
+          return acc;
+        }, {}),
+      },
+      latestJob: jobs[0] ?? null,
+      latestReceipt: receipts[0] ?? null,
+    });
     return;
   }
 
@@ -139,12 +178,22 @@ async function route(
     return;
   }
 
+  if (req.method === "GET" && url.pathname === "/v1/jobs") {
+    const limit = readLimit(url, 25);
+    const status = url.searchParams.get("status");
+    const jobs = state.store
+      .listJobs()
+      .filter((job) => !status || job.status === status)
+      .slice(0, limit);
+    sendJson(res, 200, { jobs });
+    return;
+  }
+
   if (req.method === "GET" && url.pathname.startsWith("/v1/jobs/")) {
     const id = decodeURIComponent(url.pathname.replace("/v1/jobs/", ""));
     const job = state.store.getJob(id);
     if (!job) {
-      sendJson(res, 404, { error: `Job not found: ${id}` });
-      return;
+      throw new ApiError(404, `Job not found: ${id}`, "JOB_NOT_FOUND");
     }
     sendJson(res, 200, { job });
     return;
@@ -194,7 +243,7 @@ function scanRequest(
 ): ScanResponse {
   const prompt = body.prompt;
   if (typeof prompt !== "string" || prompt.length === 0) {
-    throw new Error("Request body must include a non-empty string prompt");
+    throw new ApiError(400, "Request body must include a non-empty string prompt", "INVALID_PROMPT");
   }
 
   const promptBytes = encodePromptForCircuit(prompt);
@@ -206,7 +255,7 @@ function scanRequest(
       : registry.presets[preset]?.patterns;
 
   if (!patternIds?.length) {
-    throw new Error(`No patterns configured for preset "${preset}"`);
+    throw new ApiError(400, `No patterns configured for preset "${preset}"`, "NO_PATTERNS");
   }
 
   const results = scanPatternIds(promptBytes, patternIds, registry);
@@ -375,12 +424,24 @@ function sha256Hex(input: string): string {
 
 function encodePromptForCircuit(prompt: string): Uint8Array {
   const bytes = new TextEncoder().encode(prompt);
-  if (bytes.length > PROMPT_MAX_BYTES) {
-    throw new Error(
-      `Prompt exceeds GhostProver's ${PROMPT_MAX_BYTES}-byte circuit limit: ${bytes.length} bytes`
+  if (bytes.length > MAX_PROMPT_BYTES) {
+    throw new ApiError(
+      413,
+      `Prompt exceeds GhostProver's ${MAX_PROMPT_BYTES}-byte circuit limit: ${bytes.length} bytes`,
+      "PROMPT_TOO_LARGE"
     );
   }
   return bytes;
+}
+
+function readLimit(url: URL, fallback: number): number {
+  const raw = url.searchParams.get("limit");
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1 || value > 100) {
+    throw new ApiError(400, "limit must be an integer between 1 and 100", "INVALID_LIMIT");
+  }
+  return value;
 }
 
 function setCors(res: http.ServerResponse) {
@@ -403,7 +464,11 @@ async function readJson<T>(req: http.IncomingMessage): Promise<T> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   const raw = Buffer.concat(chunks).toString("utf-8");
-  return raw ? (JSON.parse(raw) as T) : ({} as T);
+  try {
+    return raw ? (JSON.parse(raw) as T) : ({} as T);
+  } catch {
+    throw new ApiError(400, "Request body must be valid JSON", "INVALID_JSON");
+  }
 }
 
 function openSse(res: http.ServerResponse, clients: Set<SseClient>) {

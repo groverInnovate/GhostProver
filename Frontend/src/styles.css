@@ -349,6 +349,12 @@ button:disabled {
   border-color: #f3cf86;
 }
 
+.byte-pill.danger {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: #f3b5b0;
+}
+
 .verdict.clean {
   color: var(--green);
   background: var(--green-soft);
@@ -454,6 +460,7 @@ button:disabled {
 .result-row,
 .proof-row,
 .history-row,
+.job-row,
 .receipt-field {
   display: grid;
   align-items: center;
@@ -497,13 +504,15 @@ button:disabled {
 
 .result-copy,
 .proof-row div:not(.proof-icon),
-.history-row div {
+.history-row div,
+.job-row div {
   min-width: 0;
 }
 
 .result-copy strong,
 .proof-row strong,
-.history-row strong {
+.history-row strong,
+.job-row strong {
   display: block;
   overflow: hidden;
   color: var(--text);
@@ -514,7 +523,8 @@ button:disabled {
 
 .result-copy span,
 .proof-row span,
-.history-row span {
+.history-row span,
+.job-row span {
   display: block;
   overflow: hidden;
   margin-top: 2px;
@@ -589,6 +599,7 @@ button:disabled {
 
 .receipt-field code,
 .history-row code,
+.job-row code,
 .pattern-tags code {
   overflow: hidden;
   color: var(--text);
@@ -612,6 +623,48 @@ button:disabled {
   border: 1px solid #b8decf;
   border-radius: var(--radius);
   font-weight: 800;
+}
+
+.runtime-panel {
+  box-shadow: none;
+}
+
+.runtime-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.runtime-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 34px;
+  padding: 8px 10px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.runtime-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.runtime-row code {
+  overflow: hidden;
+  color: var(--text);
+  font: 12px var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-strip {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
 }
 
 .submission-panel {
@@ -806,16 +859,51 @@ button:disabled {
   align-items: start;
 }
 
-.history-row {
+.history-row,
+.job-row {
   grid-template-columns: minmax(0, 1fr) minmax(120px, 180px) auto;
 }
 
-.history-badge {
+.history-badge,
+.status-badge {
   color: var(--green);
   background: var(--green-soft);
   border-color: #b8decf;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.status-badge {
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 1px solid #b8decf;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.status-badge.queued {
+  color: var(--muted);
+  background: #ffffff;
+  border-color: var(--line);
+}
+
+.status-badge.proving {
+  color: var(--blue);
+  background: #eaf1ff;
+  border-color: #b9cffc;
+}
+
+.status-badge.blocked,
+.status-badge.failed {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: #f3b5b0;
+}
+
+.status-badge.done {
+  color: var(--green);
+  background: var(--green-soft);
+  border-color: #b8decf;
 }
 
 .empty-state {
@@ -895,6 +983,7 @@ button:disabled {
   }
 
   .history-row,
+  .job-row,
   .receipt-field,
   .receipt-fields.expanded .receipt-field {
     grid-template-columns: 1fr;

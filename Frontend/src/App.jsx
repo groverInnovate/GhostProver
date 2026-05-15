@@ -53,6 +53,26 @@ function shortHash(value) {
   return `${value.slice(0, 10)}...${value.slice(-8)}`;
 }
 
+function formatDate(value) {
+  if (!value) return "pending";
+  return new Date(value).toLocaleString();
+}
+
+function networkLabel(rpcUrl = "") {
+  if (rpcUrl.includes("evmrpc.0g.ai")) return "0G Mainnet";
+  if (rpcUrl.includes("galileo")) return "0G Galileo Testnet";
+  return rpcUrl ? "Custom RPC" : "Local daemon";
+}
+
+async function apiErrorMessage(response, fallback) {
+  try {
+    const payload = await response.json();
+    return payload.error ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function loadHistory() {
   try {
     return JSON.parse(localStorage.getItem("ghostprover-history") || "[]");
@@ -106,6 +126,8 @@ function App() {
   const [prompt, setPrompt] = useState(SAMPLE_PROMPTS.clean);
   const [registry, setRegistry] = useState(REGISTRY);
   const [config, setConfig] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [jobs, setJobs] = useState([]);
   const [daemonOnline, setDaemonOnline] = useState(false);
   const [scan, setScan] = useState(null);
   const [commitment, setCommitment] = useState("");
@@ -119,6 +141,8 @@ function App() {
 
   const preset = presetView(selectedPreset, registry.presets[selectedPreset] ?? REGISTRY.presets.saas);
   const promptBytes = bytesOf(prompt).length;
+  const maxPromptBytes = config?.maxPromptBytes ?? status?.maxPromptBytes ?? 512;
+  const promptTooLarge = promptBytes > maxPromptBytes;
   const blockedCount = scan?.results.filter((item) => item.matched).length ?? 0;
   const cleanCount = scan?.results.filter((item) => !item.matched).length ?? 0;
 
@@ -131,23 +155,30 @@ function App() {
 
     async function loadDaemonState() {
       try {
-        const [configResponse, presetsResponse, receiptsResponse] = await Promise.all([
-          fetch(`${API_BASE}/v1/config`),
+        const [statusResponse, presetsResponse, receiptsResponse, jobsResponse] = await Promise.all([
+          fetch(`${API_BASE}/v1/status`),
           fetch(`${API_BASE}/v1/presets`),
           fetch(`${API_BASE}/v1/receipts`),
+          fetch(`${API_BASE}/v1/jobs?limit=12`),
         ]);
-        if (!configResponse.ok || !presetsResponse.ok || !receiptsResponse.ok) {
+        if (!statusResponse.ok || !presetsResponse.ok || !receiptsResponse.ok || !jobsResponse.ok) {
           throw new Error("daemon request failed");
         }
-        const nextConfig = await configResponse.json();
+        const nextStatus = await statusResponse.json();
+        const nextConfig = nextStatus.config;
         const nextRegistry = await presetsResponse.json();
         const receipts = await receiptsResponse.json();
+        const jobPayload = await jobsResponse.json();
+        const nextJobs = jobPayload.jobs ?? [];
+        setStatus(nextStatus);
         setConfig(nextConfig);
+        setJobs(nextJobs);
         setRegistry(nextRegistry);
         setSelectedPreset(nextConfig.preset ?? "saas");
         setDaemonOnline(true);
         setApiError("");
-        setReceipt(receipts.receipts[0] ?? null);
+        setLatestJob(nextStatus.latestJob ?? nextJobs[0] ?? null);
+        setReceipt(nextStatus.latestReceipt ?? receipts.receipts[0] ?? null);
         setHistory(
           receipts.receipts.map((item) => ({
             id: item.id,
@@ -165,6 +196,7 @@ function App() {
           const job = JSON.parse(event.data);
           if (!job.scan?.results) return;
           setLatestJob(job);
+          setJobs((current) => [job, ...current.filter((item) => item.id !== job.id)].slice(0, 12));
           setProofRun(job.patternIds.map((id) => {
             const result = job.scan.results.find((item) => item.id === id);
             const latest = [...job.progress].reverse().find((item) => item.patternId === id);
@@ -235,14 +267,24 @@ function App() {
       setApiError("Daemon is offline. Start the local agent with npm run daemon.");
       return;
     }
-    const response = await fetch(`${API_BASE}/v1/scan`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, preset: selectedPreset }),
-    });
-    if (!response.ok) {
+    if (promptTooLarge) {
+      setApiError(`Prompt is ${promptBytes} bytes; GhostProver accepts ${maxPromptBytes} bytes.`);
+      return;
+    }
+    let response;
+    try {
+      response = await fetch(`${API_BASE}/v1/scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, preset: selectedPreset }),
+      });
+    } catch {
       setDaemonOnline(false);
       setApiError("Scan failed because the daemon did not respond.");
+      return;
+    }
+    if (!response.ok) {
+      setApiError(await apiErrorMessage(response, "Scan failed."));
       return;
     }
     const payload = await response.json();
@@ -266,16 +308,26 @@ function App() {
       setApiError("Daemon is offline. Start the local agent with npm run daemon.");
       return;
     }
+    if (promptTooLarge) {
+      setApiError(`Prompt is ${promptBytes} bytes; GhostProver accepts ${maxPromptBytes} bytes.`);
+      return;
+    }
 
     setProofRun(scan.results.map((result) => ({ ...result, status: "queued", proofSize: 0 })));
-    const response = await fetch(`${API_BASE}/v1/attest`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, preset: selectedPreset }),
-    });
-    if (!response.ok) {
+    let response;
+    try {
+      response = await fetch(`${API_BASE}/v1/attest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, preset: selectedPreset }),
+      });
+    } catch {
       setDaemonOnline(false);
       setApiError("Attestation failed because the daemon did not respond.");
+      return;
+    }
+    if (!response.ok) {
+      setApiError(await apiErrorMessage(response, "Attestation failed."));
       return;
     }
     const payload = await response.json();
@@ -333,16 +385,16 @@ function App() {
         <div className="sidebar-panel">
           <div className="panel-label">Network</div>
           <div className="network-row">
-            <span className="status-dot live" />
-            <span>0G Galileo Testnet</span>
+            <span className={cx("status-dot", daemonOnline && "live")} />
+            <span>{networkLabel(config?.rpcUrl)}</span>
           </div>
           <div className="network-grid">
-            <span>Verifier</span>
-            <strong>Honk</strong>
-            <span>Circuit</span>
-            <strong>v2</strong>
+            <span>Registry</span>
+            <strong>{config?.registryAddress ? shortHash(config.registryAddress) : "local"}</strong>
+            <span>Submit</span>
+            <strong>{config?.onChainSubmit ? "on-chain" : "local"}</strong>
             <span>Mode</span>
-            <strong>Pattern</strong>
+            <strong>{config?.proofMode ?? "background"}</strong>
           </div>
         </div>
       </aside>
@@ -351,10 +403,10 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">Operator workspace</p>
-            <h1>Compliance proof desk</h1>
+            <h1>Compliance control room</h1>
             <p className={cx("daemon-state", daemonOnline ? "online" : "offline")}>
               {daemonOnline
-                ? `Daemon connected at ${API_BASE}`
+                ? `${networkLabel(config?.rpcUrl)} policy active at ${API_BASE}`
                 : `Daemon offline. Start it with: npm run cli -- daemon`}
             </p>
           </div>
@@ -365,7 +417,7 @@ function App() {
             <button
               className="primary-action"
               onClick={runProofs}
-              disabled={!scan?.clean || !daemonOnline}
+              disabled={!scan?.clean || !daemonOnline || promptTooLarge}
               type="button"
             >
               <Play size={17} />
@@ -390,8 +442,8 @@ function App() {
                     <p className="section-kicker">Prompt intake</p>
                     <h2>Scan before inference</h2>
                   </div>
-                  <div className={cx("byte-pill", promptBytes > 480 && "warn")}>
-                    {Math.min(promptBytes, 512)} / 512 bytes
+                  <div className={cx("byte-pill", promptBytes > maxPromptBytes * 0.9 && "warn", promptTooLarge && "danger")}>
+                    {promptBytes} / {maxPromptBytes} bytes
                   </div>
                 </div>
 
@@ -419,7 +471,6 @@ function App() {
                 <textarea
                   className="prompt-box"
                   value={prompt}
-                  maxLength={512}
                   onChange={(event) => {
                     setPrompt(event.target.value);
                     resetRun();
@@ -451,7 +502,7 @@ function App() {
                   <button
                     className="scan-button"
                     type="button"
-                    disabled={promptBytes === 0 || !daemonOnline}
+                    disabled={promptBytes === 0 || !daemonOnline || promptTooLarge}
                     onClick={runScan}
                   >
                     <FileSearch size={18} />
@@ -517,6 +568,8 @@ function App() {
                 scan={scan}
                 selectedPreset={selectedPreset}
               />
+
+              <RuntimePanel config={config} status={status} jobs={jobs} />
 
               <MetricGrid
                 cleanCount={cleanCount}
@@ -620,6 +673,35 @@ function App() {
             <section className="surface">
               <div className="surface-head">
                 <div>
+                  <p className="section-kicker">Jobs</p>
+                  <h2>Proof queue</h2>
+                </div>
+                <Activity size={22} />
+              </div>
+              <div className="history-list">
+                {jobs.length === 0 ? (
+                  <div className="empty-state">
+                    <CloudCog size={24} />
+                    <span>No proof jobs recorded</span>
+                  </div>
+                ) : (
+                  jobs.map((item) => (
+                    <article key={item.id} className="job-row">
+                      <div>
+                        <strong>{item.preset ?? "custom policy"}</strong>
+                        <span>{formatDate(item.updatedAt)}</span>
+                      </div>
+                      <code>{shortHash(item.commitment)}</code>
+                      <span className={cx("status-badge", item.status)}>{item.status}</span>
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
+
+            <section className="surface">
+              <div className="surface-head">
+                <div>
                   <p className="section-kicker">Latest receipt</p>
                   <h2>{receipt ? "Batch receipt ready" : "No receipt yet"}</h2>
                 </div>
@@ -647,7 +729,7 @@ function App() {
                     <article key={item.id} className="history-row">
                       <div>
                         <strong>{item.preset}</strong>
-                        <span>{new Date(item.createdAt).toLocaleString()}</span>
+                        <span>{formatDate(item.createdAt)}</span>
                       </div>
                       <code>{shortHash(item.commitment)}</code>
                       <span className="history-badge">{item.proofs} proofs</span>
@@ -728,6 +810,44 @@ function SubmissionProofPanel({ config, daemonOnline, latestJob, receipt, scan, 
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function RuntimePanel({ config, status, jobs }) {
+  const counts = status?.counts?.byStatus ?? {};
+  const rows = [
+    ["RPC", config?.rpcUrl ?? "pending"],
+    ["Registry", config?.registryAddress || "local receipt mode"],
+    ["Proof mode", config?.proofMode ?? "background"],
+    ["Policy", `${config?.policyPatternIds?.length ?? 0} patterns`],
+    ["Jobs", `${jobs.length} recent / ${status?.counts?.jobs ?? 0} total`],
+  ];
+
+  return (
+    <section className="surface runtime-panel">
+      <div className="surface-head compact">
+        <div>
+          <p className="section-kicker">Runtime</p>
+          <h2>{networkLabel(config?.rpcUrl)}</h2>
+        </div>
+        <Server size={20} />
+      </div>
+      <div className="runtime-grid">
+        {rows.map(([label, value]) => (
+          <div className="runtime-row" key={label}>
+            <span>{label}</span>
+            <code>{value}</code>
+          </div>
+        ))}
+      </div>
+      <div className="status-strip">
+        {["queued", "proving", "blocked", "done", "failed"].map((key) => (
+          <span className={cx("status-badge", key)} key={key}>
+            {key} {counts[key] ?? 0}
+          </span>
+        ))}
       </div>
     </section>
   );

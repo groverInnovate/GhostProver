@@ -76,7 +76,10 @@ export function scanSinglePattern(promptBytes, pattern) {
 }
 
 export function scanPreset(prompt, presetId) {
-  const promptBytes = bytesOf(prompt).slice(0, 512);
+  const promptBytes = bytesOf(prompt);
+  if (promptBytes.length > 512) {
+    throw new Error(`Prompt exceeds GhostProver's 512-byte circuit limit: ${promptBytes.length} bytes`);
+  }
   const preset = REGISTRY.presets[presetId];
   const results = preset.patterns.map((patternId) => {
     const pattern = REGISTRY.patterns[patternId];

@@ -15,8 +15,10 @@ it forwards all tool calls to the local daemon at `http://127.0.0.1:8787`.
 
 | Tool | Purpose |
 |---|---|
+| `ghostprover_status` | Read daemon health, effective policy, latest job, and latest receipt. |
 | `ghostprover_scan_prompt` | Scan a prompt and return clean/blocked results. |
 | `ghostprover_attest_prompt` | Scan, then enqueue proofs if the prompt is clean. |
+| `ghostprover_list_jobs` | List recent proof jobs, optionally filtered by status. |
 | `ghostprover_get_job` | Read a background job by ID. |
 | `ghostprover_list_receipts` | List locally persisted receipts. |
 | `ghostprover_list_presets` | List available presets and patterns. |

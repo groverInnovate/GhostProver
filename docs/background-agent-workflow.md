@@ -39,10 +39,12 @@ flowchart TD
 | Endpoint | Purpose |
 |---|---|
 | `GET /health` | Check daemon availability. |
+| `GET /v1/status` | Read health, effective policy, counts, latest job, and latest receipt. |
 | `GET /v1/config` | Return effective local policy. |
 | `GET /v1/presets` | Return merged presets and patterns. |
 | `POST /v1/scan` | Scan a prompt without proving. |
 | `POST /v1/attest` | Scan and enqueue proofs if clean. |
+| `GET /v1/jobs` | List recent persisted job snapshots. |
 | `GET /v1/jobs/:id` | Read the latest snapshot for a job. |
 | `GET /v1/receipts` | List locally persisted receipts. |
 | `GET /v1/events` | Stream job and receipt updates over SSE. |

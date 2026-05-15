@@ -27,6 +27,13 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return payload;
 }
 
+async function requestError(url: string, init?: RequestInit) {
+  const response = await fetch(url, init);
+  const payload = (await response.json()) as { error?: string; code?: string };
+  assert(!response.ok, `Request unexpectedly passed: ${url}`);
+  return { status: response.status, payload };
+}
+
 async function main() {
   const customRegistryPath = path.join(projectRoot, "examples", "custom-registry.json");
   fs.writeFileSync(
@@ -50,14 +57,28 @@ async function main() {
   const base = `http://127.0.0.1:${port}`;
 
   try {
-    const health = await requestJson<{ ok: boolean }>(`${base}/health`);
+    const health = await requestJson<{ ok: boolean; maxPromptBytes: number }>(`${base}/health`);
     assert(health.ok, "health endpoint did not return ok");
+    assert(health.maxPromptBytes === 512, "health endpoint did not expose prompt limit");
 
-    const config = await requestJson<{ blockOnDetection: boolean; policyPatternIds: string[] }>(
+    const config = await requestJson<{
+      blockOnDetection: boolean;
+      policyPatternIds: string[];
+      maxPromptBytes: number;
+    }>(
       `${base}/v1/config`
     );
     assert(config.blockOnDetection === true, "config did not preserve blockOnDetection");
     assert(config.policyPatternIds.length > 0, "config did not resolve policy patterns");
+    assert(config.maxPromptBytes === 512, "config did not expose prompt limit");
+
+    const status = await requestJson<{
+      ok: boolean;
+      counts: { jobs: number; receipts: number };
+      latestJob: unknown;
+    }>(`${base}/v1/status`);
+    assert(status.ok, "status endpoint did not return ok");
+    assert(status.counts.jobs === 0, "status endpoint had unexpected jobs");
 
     const presets = await requestJson<{ presets: Record<string, unknown> }>(`${base}/v1/presets`);
     assert(Boolean(presets.presets.acme_internal), "custom registry preset was not merged");
@@ -101,6 +122,17 @@ async function main() {
       `${base}/v1/jobs/${blockedAttest.job.id}`
     );
     assert(jobLookup.job.status === "blocked", "job lookup did not return persisted blocked job");
+
+    const jobs = await requestJson<{ jobs: { id: string; status: string }[] }>(`${base}/v1/jobs`);
+    assert(jobs.jobs[0]?.id === blockedAttest.job.id, "job list did not return latest job");
+
+    const oversized = await requestError(`${base}/v1/scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "x".repeat(513), preset: "saas" }),
+    });
+    assert(oversized.status === 413, "oversized prompt did not return 413");
+    assert(oversized.payload.code === "PROMPT_TOO_LARGE", "oversized prompt used wrong error code");
 
     const receipts = await requestJson<{ receipts: unknown[] }>(`${base}/v1/receipts`);
     assert(Array.isArray(receipts.receipts), "receipts endpoint did not return an array");

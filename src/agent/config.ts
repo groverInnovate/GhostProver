@@ -35,6 +35,8 @@ export interface EffectiveGhostProverConfig extends GhostProverConfig {
   storageDir: string;
 }
 
+export const MAX_PROMPT_BYTES = 512;
+
 export const DEFAULT_CONFIG: GhostProverConfig = {
   preset: "saas",
   patterns: [],
@@ -200,6 +202,7 @@ export function publicConfig(config: EffectiveGhostProverConfig, registry: Patte
     onChainSubmit: config.onChainSubmit,
     registryAddress: config.registryAddress,
     rpcUrl: config.rpcUrl,
+    maxPromptBytes: MAX_PROMPT_BYTES,
     policyPatternIds: resolvePolicyPatternIds(config, registry),
   };
 }

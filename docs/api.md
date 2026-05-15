@@ -18,10 +18,12 @@ http://127.0.0.1:8787
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | Check daemon availability. |
+| `GET` | `/v1/status` | Return health, effective config, counts, latest job, and latest receipt. |
 | `GET` | `/v1/config` | Return effective local policy. |
 | `GET` | `/v1/presets` | Return merged presets and patterns. |
 | `POST` | `/v1/scan` | Fast scan only, no proof generation. |
 | `POST` | `/v1/attest` | Scan, block if risky, enqueue proofs if clean. |
+| `GET` | `/v1/jobs` | Return recent persisted job snapshots. Supports `limit` and `status`. |
 | `GET` | `/v1/jobs/:id` | Return latest persisted job snapshot. |
 | `GET` | `/v1/receipts` | Return local receipts. |
 | `GET` | `/v1/events` | Server-Sent Events for job and receipt updates. |
@@ -101,3 +103,18 @@ Receipts include:
 
 Live 0G upload and on-chain submission can replace the local receipt adapter
 without changing the scan/attest API shape.
+
+## Error Handling
+
+Prompts over the circuit limit are rejected instead of truncated:
+
+```json
+{
+  "error": "Prompt exceeds GhostProver's 512-byte circuit limit: 513 bytes",
+  "code": "PROMPT_TOO_LARGE"
+}
+```
+
+HTTP status codes are intentional: invalid input returns `400`, oversized
+prompts return `413`, missing jobs return `404`, and unexpected daemon failures
+return `500`.

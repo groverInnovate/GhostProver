@@ -26,6 +26,20 @@ const promptInput = {
 };
 
 server.registerTool(
+  "ghostprover_status",
+  {
+    description: "Return daemon health, effective policy, latest job, and latest receipt.",
+    inputSchema: {},
+  },
+  async () => {
+    const result: any = await daemonGet("/v1/status");
+    const job = result.latestJob ? `latest job ${result.latestJob.status}` : "no jobs";
+    const receipts = result.counts?.receipts ?? 0;
+    return toolResult(result, `GhostProver daemon online: ${job}, ${receipts} receipt(s).`);
+  }
+);
+
+server.registerTool(
   "ghostprover_scan_prompt",
   {
     description: "Scan a prompt for sensitive data using the local GhostProver daemon.",
@@ -72,6 +86,25 @@ server.registerTool(
 );
 
 server.registerTool(
+  "ghostprover_list_jobs",
+  {
+    description: "List recent GhostProver background proof jobs.",
+    inputSchema: {
+      limit: z.number().int().positive().max(100).optional(),
+      status: z.enum(["queued", "proving", "blocked", "done", "failed"]).optional(),
+    },
+  },
+  async ({ limit, status }) => {
+    const params = new URLSearchParams();
+    if (limit) params.set("limit", String(limit));
+    if (status) params.set("status", status);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    const result: any = await daemonGet(`/v1/jobs${suffix}`);
+    return toolResult(result, `${result.jobs.length} job(s).`);
+  }
+);
+
+server.registerTool(
   "ghostprover_list_receipts",
   {
     description: "List locally stored GhostProver receipts.",
@@ -111,19 +144,31 @@ async function daemonPost(path: string, body: unknown): Promise<Record<string, u
 }
 
 async function daemonFetch(path: string, init: RequestInit): Promise<Record<string, unknown>> {
+  let response: Response;
   try {
-    const response = await fetch(`${DAEMON_URL}${path}`, init);
-    const text = await response.text();
-    const parsed = text ? JSON.parse(text) : {};
-    if (!response.ok) {
-      throw new Error(parsed.error ?? `HTTP ${response.status}`);
-    }
-    return parsed as Record<string, unknown>;
+    response = await fetch(`${DAEMON_URL}${path}`, init);
   } catch (err) {
     throw new Error(
       `GhostProver daemon is not reachable at ${DAEMON_URL}. Start it with: npm run cli -- daemon. ` +
         `Original error: ${(err as Error).message}`
     );
+  }
+
+  const text = await response.text();
+  const parsed = text ? safeParseJson(text) : {};
+  if (!response.ok) {
+    const message =
+      typeof parsed.error === "string" ? parsed.error : text || `HTTP ${response.status}`;
+    throw new Error(`GhostProver daemon returned HTTP ${response.status}: ${message}`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+function safeParseJson(text: string): Record<string, unknown> {
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { raw: text };
   }
 }
 
