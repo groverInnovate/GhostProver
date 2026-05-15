@@ -74,23 +74,23 @@ export {
   loadEffectiveRegistry,
   publicConfig,
   resolvePolicyPatternIds,
-} from "./config.js";
+} from "./agent/config.js";
 
 export type {
   GhostProverConfig,
   EffectiveGhostProverConfig,
-} from "./config.js";
+} from "./agent/config.js";
 
 export {
   startDaemon,
-} from "./daemon.js";
+} from "./agent/daemon.js";
 
 export {
   LocalStore,
-} from "./local-store.js";
+} from "./agent/local-store.js";
 
 export type {
   StoredJob,
   StoredReceipt,
   JobStatus,
-} from "./local-store.js";
+} from "./agent/local-store.js";

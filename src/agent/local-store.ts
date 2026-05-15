@@ -1,6 +1,13 @@
 import * as fs from "fs";
 import * as path from "path";
 
+/**
+ * Append-only local persistence for the background agent.
+ *
+ * Jobs are written repeatedly as JSONL snapshots. Reads collapse snapshots by
+ * job id, which gives us simple durability and a useful audit trail without
+ * needing SQLite or migrations during the hackathon/product-prototype phase.
+ */
 export type JobStatus = "queued" | "proving" | "blocked" | "done" | "failed";
 
 export interface StoredJob {

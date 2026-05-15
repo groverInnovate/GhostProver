@@ -24,9 +24,9 @@ import {
 } from "./registry/index.js";
 import { computeCommitment } from "./ghostprover.js";
 import { computePatternHash } from "./poseidon2.js";
-import { startDaemon } from "./daemon.js";
-import { createDefaultConfig, resolveConfigPath } from "./config.js";
-import { startMcpServer } from "./mcp-server.js";
+import { startDaemon } from "./agent/daemon.js";
+import { createDefaultConfig, resolveConfigPath } from "./agent/config.js";
+import { startMcpServer } from "./agent/mcp-server.js";
 import * as fs from "fs";
 import * as path from "path";
 

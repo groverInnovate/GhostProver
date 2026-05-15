@@ -7,6 +7,13 @@ const config = loadGhostProverConfig();
 const DAEMON_URL = process.env.GHOSTPROVER_DAEMON_URL ??
   `http://${config.daemon.host}:${config.daemon.port}`;
 
+/**
+ * Stdio MCP bridge for coding-agent products.
+ *
+ * MCP stays thin on purpose: it does not own policy or persistence. It calls the
+ * local daemon, which means Claude Code/Codex/Antigravity-style clients and the
+ * dashboard all observe the same jobs, receipts, and blocking decisions.
+ */
 const server = new McpServer({
   name: "ghostprover",
   version: "0.2.0",

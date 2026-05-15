@@ -1,8 +1,8 @@
 import * as http from "http";
 import { createHash, randomUUID } from "crypto";
 import { URL } from "url";
-import { generateBatchProofs, scanPatternIds } from "./batch-prover.js";
-import { computeCommitment } from "./ghostprover.js";
+import { generateBatchProofs, scanPatternIds } from "../batch-prover.js";
+import { computeCommitment } from "../ghostprover.js";
 import {
   loadEffectiveRegistry,
   loadGhostProverConfig,
@@ -11,7 +11,7 @@ import {
   type EffectiveGhostProverConfig,
 } from "./config.js";
 import { LocalStore, type StoredJob, type StoredReceipt } from "./local-store.js";
-import type { PatternRegistry } from "./registry/index.js";
+import type { PatternRegistry } from "../registry/index.js";
 
 interface DaemonOptions {
   cwd?: string;
@@ -39,6 +39,13 @@ interface ScanResponse {
 
 type SseClient = http.ServerResponse;
 
+/**
+ * Start the local GhostProver compliance agent.
+ *
+ * The daemon is the source of truth for local integrations: the React console
+ * reads from it, MCP tools call it, and future editor/proxy integrations can
+ * reuse the same scan/attest contract.
+ */
 export async function startDaemon(options: DaemonOptions = {}): Promise<http.Server> {
   const cwd = options.cwd ?? process.cwd();
   const config = loadGhostProverConfig(cwd, options.configPath);
@@ -174,6 +181,11 @@ async function route(
   sendJson(res, 404, { error: "Not found" });
 }
 
+/**
+ * Convert a prompt into policy results without generating proofs.
+ * Proof generation is deliberately gated behind `/v1/attest` so callers can
+ * use fast scans in interactive UX and reserve bb.js work for clean prompts.
+ */
 function scanRequest(
   body: ScanRequest,
   config: EffectiveGhostProverConfig,
@@ -242,6 +254,10 @@ function createJob(
   };
 }
 
+/**
+ * Run one background proof job. Progress is persisted and emitted over SSE so
+ * the UI can update live while JSONL remains the durable recovery source.
+ */
 async function runProofJob(
   job: StoredJob,
   prompt: string,
@@ -301,6 +317,11 @@ function updateJob(job: StoredJob, patch: Partial<StoredJob>): StoredJob {
   };
 }
 
+/**
+ * Local receipt shape mirrors the future 0G bundle: commitment, target hashes,
+ * proof statuses, and a storage root. For now the root is a SHA-256 digest of
+ * the local audit bundle; live 0G Storage can replace this adapter later.
+ */
 function createReceipt(
   job: StoredJob,
   results: {

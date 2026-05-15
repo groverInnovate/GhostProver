@@ -29,6 +29,7 @@ Pattern Types (private) ┘
 - **Parallel Batch Prover**: Generates multiple non-inclusion proofs concurrently for a single prompt commitment.
 - **On-chain Batch Receipts**: Smart contract logic (`submitBatchReceipt`) groups all proofs into a single gas-efficient transaction.
 - **Express Middleware**: Drop-in `ghostProverMiddleware()` for automatic AI request interception and background attestation.
+- **Background Agent + MCP**: Local daemon and MCP tools let coding-agent workflows scan, block, prove, and persist local receipts in the background.
 
 ## TypeScript SDK & CLI
 
@@ -45,7 +46,15 @@ npx ghostprover scan --preset banking --prompt "Patient query: SSN is 123456789"
 
 # Generate parallel ZK Proofs for an entire preset
 npx ghostprover prove --preset saas --prompt "Clean prompt with no API keys"
+
+# Start the local background compliance agent
+npm run daemon
+
+# Start the MCP bridge for Claude Code / Codex / Antigravity-style tools
+npm run mcp
 ```
+
+See [`docs/background-agent-workflow.md`](docs/background-agent-workflow.md) for the daemon/MCP workflow, local API, JSONL receipt store, and flowchart.
 
 ### Express Middleware
 ```typescript
@@ -136,6 +145,7 @@ commitment and a real TEE-attested request identity from 0G Compute.
 │   ├── cli.ts            # GhostProver terminal interface
 │   ├── middleware.ts     # Express.js drop-in integration
 │   ├── poseidon2.ts      # Pure TypeScript BN254 zero-knowledge hashing
+│   ├── agent/            # Local daemon, config, JSONL store, MCP bridge
 │   └── registry/         # Industry presets and pattern definitions
 ├── Circuit/ghostprover/
 │   ├── src/main.nr       # ZK circuit (Dual-mode non-inclusion + character classes)
@@ -144,7 +154,9 @@ commitment and a real TEE-attested request identity from 0G Compute.
 │   ├── src/GhostProverRegistry.sol   # Batch receipt registry
 │   └── test/GhostProverRegistry.t.sol
 ├── Frontend/
-│   └── index.html        # High-performance static UI dashboard
+│   └── src/              # React operator console connected to the daemon
+├── docs/
+│   └── background-agent-workflow.md  # Daemon/MCP workflow and flowchart
 └── Compute/
     ├── src/mock-inference.ts         # TEE envelope simulation
     └── src/orchestrator.ts           # Full inference + attestation pipeline

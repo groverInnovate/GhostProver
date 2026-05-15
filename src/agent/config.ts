@@ -4,8 +4,13 @@ import {
   loadRegistry,
   validateRegistry,
   type PatternRegistry,
-} from "./registry/index.js";
+} from "../registry/index.js";
 
+/**
+ * Runtime policy used by the daemon, MCP server, middleware-style integrations,
+ * and the React console. This is intentionally small and file-based so a team
+ * can drop GhostProver into an existing repo without provisioning a database.
+ */
 export interface GhostProverConfig {
   preset: string;
   patterns: string[];
@@ -121,6 +126,13 @@ function resolveCustomRegistryPath(config: EffectiveGhostProverConfig): string |
   return path.resolve(path.dirname(config.configPath), config.customRegistryPath);
 }
 
+/**
+ * Merge the bundled registry with an optional project-local registry.
+ *
+ * Custom registries use the same JSON shape as `src/registry/patterns.json`.
+ * This keeps company-specific policy outside the package while preserving the
+ * exact circuit-facing pattern schema and validation rules.
+ */
 export function loadEffectiveRegistry(config: EffectiveGhostProverConfig): PatternRegistry {
   const registry = JSON.parse(JSON.stringify(loadRegistry())) as PatternRegistry;
   const customPath = resolveCustomRegistryPath(config);
@@ -154,6 +166,10 @@ export function loadEffectiveRegistry(config: EffectiveGhostProverConfig): Patte
   return registry;
 }
 
+/**
+ * Resolve the effective policy pattern set. Explicit `patterns` wins over the
+ * selected preset so companies can start from a preset and narrow the policy.
+ */
 export function resolvePolicyPatternIds(
   config: EffectiveGhostProverConfig,
   registry: PatternRegistry
