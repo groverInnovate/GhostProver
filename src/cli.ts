@@ -24,6 +24,9 @@ import {
 } from "./registry/index.js";
 import { computeCommitment } from "./ghostprover.js";
 import { computePatternHash } from "./poseidon2.js";
+import { startDaemon } from "./daemon.js";
+import { createDefaultConfig, resolveConfigPath } from "./config.js";
+import { startMcpServer } from "./mcp-server.js";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -67,6 +70,7 @@ interface ParsedArgs {
   patternIds?: string[];
   concurrency?: number;
   output?: string;
+  port?: number;
   help?: boolean;
 }
 
@@ -99,6 +103,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "--output":
       case "-o":
         result.output = args[++i];
+        break;
+      case "--port":
+        result.port = parseInt(args[++i], 10);
         break;
       case "--help":
       case "-h":
@@ -284,7 +291,7 @@ async function cmdProve(args: ParsedArgs) {
 }
 
 async function cmdInit() {
-  const configPath = path.resolve(".ghostprover.json");
+  const configPath = resolveConfigPath();
 
   if (fs.existsSync(configPath)) {
     console.log(
@@ -306,14 +313,7 @@ async function cmdInit() {
   });
 
   // Default to saas
-  const config = {
-    preset: "saas",
-    customPatterns: [],
-    proofMode: "background",
-    onChainSubmit: false,
-    registryAddress: "",
-    rpcUrl: "https://evmrpc-testnet.0g.ai",
-  };
+  const config = createDefaultConfig();
 
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
   console.log(`\n${C.green}Created: ${configPath}${C.reset}`);
@@ -321,6 +321,16 @@ async function cmdInit() {
     `${C.dim}Edit the "preset" field to match your industry, then run:${C.reset}`
   );
   console.log(`  ${C.cyan}ghostprover scan --prompt "your test prompt"${C.reset}`);
+  console.log(`  ${C.cyan}ghostprover daemon${C.reset}`);
+}
+
+async function cmdDaemon(args: ParsedArgs) {
+  await startDaemon({ port: args.port });
+  await new Promise(() => {});
+}
+
+async function cmdMcp() {
+  await startMcpServer();
 }
 
 function cmdListPresets() {
@@ -392,6 +402,8 @@ ${C.bold}Commands:${C.reset}
   ${C.cyan}scan${C.reset}            Scan a prompt for sensitive data patterns (no proof)
   ${C.cyan}prove${C.reset}           Generate ZK proofs for all patterns in a preset
   ${C.cyan}init${C.reset}            Create a .ghostprover.json config in current directory
+  ${C.cyan}daemon${C.reset}          Start the local background compliance daemon
+  ${C.cyan}mcp${C.reset}             Start the MCP server for Claude/Codex-style tools
   ${C.cyan}list-presets${C.reset}    Show available industry presets
   ${C.cyan}list-patterns${C.reset}   Show available patterns
 
@@ -402,6 +414,7 @@ ${C.bold}Options:${C.reset}
   ${C.yellow}--patterns${C.reset}      Comma-separated pattern IDs (alternative to preset)
   ${C.yellow}--concurrency${C.reset}   Max parallel proofs (default: 3)
   ${C.yellow}--output, -o${C.reset}    Write proof results to JSON file
+  ${C.yellow}--port${C.reset}          Daemon port override
   ${C.yellow}--help, -h${C.reset}      Show this help
 
 ${C.bold}Examples:${C.reset}
@@ -416,6 +429,10 @@ ${C.bold}Examples:${C.reset}
 
   ${C.dim}# Generate proofs and save output${C.reset}
   ghostprover prove --preset banking --prompt "..." --output proofs.json
+
+  ${C.dim}# Start the local daemon and MCP server${C.reset}
+  ghostprover daemon
+  ghostprover mcp
 `);
 }
 
@@ -427,7 +444,7 @@ async function main() {
   const args = parseArgs(process.argv);
 
   // Show banner for interactive commands
-  if (!["help", "--help", "-h"].includes(args.command)) {
+  if (!["help", "--help", "-h", "mcp"].includes(args.command)) {
     banner();
   }
 
@@ -443,6 +460,12 @@ async function main() {
         break;
       case "init":
         await cmdInit();
+        break;
+      case "daemon":
+        await cmdDaemon(args);
+        break;
+      case "mcp":
+        await cmdMcp();
         break;
       case "list-presets":
         cmdListPresets();

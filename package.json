@@ -11,6 +11,8 @@
   "scripts": {
     "build": "tsc",
     "cli": "node --import tsx src/cli.ts",
+    "daemon": "node --import tsx src/cli.ts daemon",
+    "mcp": "node --import tsx src/cli.ts mcp",
     "sanity-test": "node --import tsx src/sanity-test.ts",
     "test:hashes": "node --import tsx src/sanity-test.ts",
     "test:patterns": "node --import tsx src/pattern-sanity-test.ts",
@@ -22,10 +24,12 @@
   },
   "dependencies": {
     "@aztec/bb.js": "^3.0.0-nightly.20260102",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@noir-lang/noir_js": "^1.0.0-beta.18",
     "@noir-lang/noir_wasm": "^1.0.0-beta.18",
     "@zkpassport/poseidon2": "^0.6.0",
-    "ethers": "6.13.1"
+    "ethers": "6.13.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -48,6 +48,7 @@ export type {
 export {
   generateBatchProofs,
   scanPrompt,
+  scanPatternIds,
 } from "./batch-prover.js";
 
 export type {
@@ -67,3 +68,29 @@ export type {
   GhostProverMiddlewareConfig,
   GhostProverRequestContext,
 } from "./middleware.js";
+
+export {
+  loadGhostProverConfig,
+  loadEffectiveRegistry,
+  publicConfig,
+  resolvePolicyPatternIds,
+} from "./config.js";
+
+export type {
+  GhostProverConfig,
+  EffectiveGhostProverConfig,
+} from "./config.js";
+
+export {
+  startDaemon,
+} from "./daemon.js";
+
+export {
+  LocalStore,
+} from "./local-store.js";
+
+export type {
+  StoredJob,
+  StoredReceipt,
+  JobStatus,
+} from "./local-store.js";

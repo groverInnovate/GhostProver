@@ -46,6 +46,8 @@ export interface BatchProofInput {
   onProgress?: (patternId: string, status: ProofStatus, detail?: string) => void;
   /** Max concurrent proofs (default: 3 — memory-limited by Barretenberg) */
   concurrency?: number;
+  /** Optional registry override, used for project-local custom registries */
+  registry?: PatternRegistry;
 }
 
 export interface PatternProofResult {
@@ -123,7 +125,7 @@ export async function generateBatchProofs(
     throw new Error("Either 'preset' or 'patternIds' must be provided");
   }
 
-  const registry = loadRegistry();
+  const registry = input.registry ?? loadRegistry();
   const startTime = Date.now();
 
   // Resolve patterns
@@ -213,11 +215,29 @@ export async function generateBatchProofs(
  */
 export function scanPrompt(
   promptBytes: Uint8Array,
-  preset: string
+  preset: string,
+  registry: PatternRegistry = loadRegistry()
 ): { id: string; name: string; matched: boolean; matchOffset?: number }[] {
-  const registry = loadRegistry();
   const patterns = getPatternsByPreset(registry, preset);
+  return scanPatternEntries(promptBytes, patterns);
+}
 
+export function scanPatternIds(
+  promptBytes: Uint8Array,
+  patternIds: string[],
+  registry: PatternRegistry = loadRegistry()
+): { id: string; name: string; matched: boolean; matchOffset?: number }[] {
+  const patterns = patternIds.map((id) => ({
+    id,
+    pattern: getPatternById(registry, id),
+  }));
+  return scanPatternEntries(promptBytes, patterns);
+}
+
+function scanPatternEntries(
+  promptBytes: Uint8Array,
+  patterns: { id: string; pattern: PatternDefinition }[]
+): { id: string; name: string; matched: boolean; matchOffset?: number }[] {
   const results: { id: string; name: string; matched: boolean; matchOffset?: number }[] = [];
 
   for (const { id, pattern } of patterns) {

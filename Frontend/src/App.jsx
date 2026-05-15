@@ -27,7 +27,9 @@ import {
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { CLASS_LABELS, REGISTRY } from "./registry.js";
-import { bytesOf, digestHex, makeDemoReceipt, scanPreset } from "./scanner.js";
+import { bytesOf } from "./scanner.js";
+
+const API_BASE = import.meta.env.VITE_GHOSTPROVER_API ?? "http://127.0.0.1:8787";
 
 const SAMPLE_PROMPTS = {
   clean:
@@ -59,10 +61,52 @@ function loadHistory() {
   }
 }
 
+function presetView(id, preset) {
+  const fallback = {
+    india_kyc: ["KYC", "#276ef1"],
+    banking: ["Bank", "#00875a"],
+    healthcare: ["Health", "#c2410c"],
+    fintech: ["Fin", "#7c3aed"],
+    saas: ["SaaS", "#0f766e"],
+  }[id] ?? [preset.name.slice(0, 5), "#276ef1"];
+  return {
+    ...preset,
+    short: preset.short ?? fallback[0],
+    accent: preset.accent ?? fallback[1],
+  };
+}
+
+function patternView(pattern) {
+  return {
+    ...pattern,
+    desc: pattern.desc ?? pattern.description,
+    len: pattern.len ?? pattern.target_len,
+    types: pattern.types ?? pattern.pattern_types ?? [],
+  };
+}
+
+function adaptScan(response, registry) {
+  return {
+    presetId: response.preset,
+    presetName: registry.presets[response.preset]?.name ?? response.preset,
+    byteLength: response.byteLength,
+    clean: response.clean,
+    results: response.results.map((result) => ({
+      ...result,
+      offset: result.matchOffset,
+      desc: registry.patterns[result.id]?.description,
+      len: registry.patterns[result.id]?.target_len,
+    })),
+  };
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState("console");
   const [selectedPreset, setSelectedPreset] = useState("saas");
   const [prompt, setPrompt] = useState(SAMPLE_PROMPTS.clean);
+  const [registry, setRegistry] = useState(REGISTRY);
+  const [config, setConfig] = useState(null);
+  const [daemonOnline, setDaemonOnline] = useState(false);
   const [scan, setScan] = useState(null);
   const [commitment, setCommitment] = useState("");
   const [proofRun, setProofRun] = useState([]);
@@ -71,7 +115,7 @@ function App() {
   const [registryFilter, setRegistryFilter] = useState("all");
   const [registrySearch, setRegistrySearch] = useState("");
 
-  const preset = REGISTRY.presets[selectedPreset];
+  const preset = presetView(selectedPreset, registry.presets[selectedPreset] ?? REGISTRY.presets.saas);
   const promptBytes = bytesOf(prompt).length;
   const blockedCount = scan?.results.filter((item) => item.matched).length ?? 0;
   const cleanCount = scan?.results.filter((item) => !item.matched).length ?? 0;
@@ -80,28 +124,120 @@ function App() {
     localStorage.setItem("ghostprover-history", JSON.stringify(history.slice(0, 12)));
   }, [history]);
 
+  useEffect(() => {
+    let eventSource;
+
+    async function loadDaemonState() {
+      try {
+        const [configResponse, presetsResponse, receiptsResponse] = await Promise.all([
+          fetch(`${API_BASE}/v1/config`),
+          fetch(`${API_BASE}/v1/presets`),
+          fetch(`${API_BASE}/v1/receipts`),
+        ]);
+        if (!configResponse.ok || !presetsResponse.ok || !receiptsResponse.ok) {
+          throw new Error("daemon request failed");
+        }
+        const nextConfig = await configResponse.json();
+        const nextRegistry = await presetsResponse.json();
+        const receipts = await receiptsResponse.json();
+        setConfig(nextConfig);
+        setRegistry(nextRegistry);
+        setSelectedPreset(nextConfig.preset ?? "saas");
+        setDaemonOnline(true);
+        setReceipt(receipts.receipts[0] ?? null);
+        setHistory(
+          receipts.receipts.map((item) => ({
+            id: item.id,
+            preset: nextRegistry.presets[item.preset]?.name ?? item.preset,
+            commitment: item.commitment,
+            clean: true,
+            proofs: item.proofStatuses.length,
+            createdAt: item.createdAt,
+            storageRoot: item.storageRoot,
+          }))
+        );
+
+        eventSource = new EventSource(`${API_BASE}/v1/events`);
+        eventSource.addEventListener("job", (event) => {
+          const job = JSON.parse(event.data);
+          if (!job.scan?.results) return;
+          setProofRun(job.patternIds.map((id) => {
+            const result = job.scan.results.find((item) => item.id === id);
+            const latest = [...job.progress].reverse().find((item) => item.patternId === id);
+            const status = job.status === "done"
+              ? "done"
+              : job.status === "failed"
+                ? "failed"
+                : result?.matched
+                  ? "blocked"
+                  : latest?.status ?? job.status;
+            return {
+              ...(result ?? { id }),
+              status,
+              proofSize: status === "done" ? 10560 : 0,
+            };
+          }));
+        });
+        eventSource.addEventListener("receipt", (event) => {
+          const nextReceipt = JSON.parse(event.data);
+          setReceipt(nextReceipt);
+          setHistory((current) => [
+            {
+              id: nextReceipt.id,
+              preset: nextRegistry.presets[nextReceipt.preset]?.name ?? nextReceipt.preset,
+              commitment: nextReceipt.commitment,
+              clean: true,
+              proofs: nextReceipt.proofStatuses.length,
+              createdAt: nextReceipt.createdAt,
+              storageRoot: nextReceipt.storageRoot,
+            },
+            ...current.filter((item) => item.id !== nextReceipt.id),
+          ]);
+          setActiveTab("receipts");
+        });
+      } catch {
+        setDaemonOnline(false);
+      }
+    }
+
+    loadDaemonState();
+    return () => {
+      eventSource?.close();
+    };
+  }, []);
+
   const registryItems = useMemo(() => {
-    return Object.entries(REGISTRY.patterns)
+    return Object.entries(registry.patterns)
       .filter(([id, pattern]) => {
         const inFilter =
-          registryFilter === "all" || REGISTRY.presets[registryFilter].patterns.includes(id);
+          registryFilter === "all" || registry.presets[registryFilter].patterns.includes(id);
         const query = registrySearch.trim().toLowerCase();
+        const view = patternView(pattern);
         const inSearch =
           !query ||
           id.toLowerCase().includes(query) ||
           pattern.name.toLowerCase().includes(query) ||
-          pattern.desc.toLowerCase().includes(query) ||
+          view.desc.toLowerCase().includes(query) ||
           pattern.industry.join(" ").toLowerCase().includes(query);
         return inFilter && inSearch;
       })
-      .map(([id, pattern]) => ({ id, ...pattern }));
-  }, [registryFilter, registrySearch]);
+      .map(([id, pattern]) => ({ id, ...patternView(pattern) }));
+  }, [registry, registryFilter, registrySearch]);
 
   async function runScan() {
-    const nextScan = scanPreset(prompt, selectedPreset);
-    const nextCommitment = await digestHex(`${selectedPreset}:${prompt.slice(0, 512)}`);
+    const response = await fetch(`${API_BASE}/v1/scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, preset: selectedPreset }),
+    });
+    if (!response.ok) {
+      setDaemonOnline(false);
+      return;
+    }
+    const payload = await response.json();
+    const nextScan = adaptScan(payload, registry);
     setScan(nextScan);
-    setCommitment(nextCommitment);
+    setCommitment(payload.commitment);
     setReceipt(null);
     setProofRun(
       nextScan.results.map((result) => ({
@@ -115,43 +251,24 @@ function App() {
   async function runProofs() {
     if (!scan || !scan.clean) return;
 
-    const base = scan.results.map((result) => ({
-      ...result,
-      status: "queued",
-      proofSize: 10560,
-    }));
-    setProofRun(base);
-    setReceipt(null);
-
-    for (const result of scan.results) {
-      setProofRun((current) =>
-        current.map((item) => (item.id === result.id ? { ...item, status: "proving" } : item))
-      );
-      await new Promise((resolve) => setTimeout(resolve, 520));
-      setProofRun((current) =>
-        current.map((item) =>
-          item.id === result.id
-            ? { ...item, status: "done", proofMs: 42000 + item.len * 911 }
-            : item
-        )
-      );
+    setProofRun(scan.results.map((result) => ({ ...result, status: "queued", proofSize: 0 })));
+    const response = await fetch(`${API_BASE}/v1/attest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, preset: selectedPreset }),
+    });
+    if (!response.ok) {
+      setDaemonOnline(false);
+      return;
     }
-
-    const nextReceipt = makeDemoReceipt(scan, commitment);
-    setReceipt(nextReceipt);
-    setHistory((current) => [
-      {
-        id: `${Date.now()}`,
-        preset: scan.presetName,
-        commitment,
-        clean: true,
-        proofs: scan.results.length,
-        createdAt: nextReceipt.submittedAt,
-        storageRoot: nextReceipt.storageRoot,
-      },
-      ...current,
-    ]);
-    setActiveTab("receipts");
+    const payload = await response.json();
+    if (payload.blocked) {
+      setScan(adaptScan(payload.scan, registry));
+      setProofRun(payload.job.scan.results.map((result) => ({
+        ...result,
+        status: result.matched ? "blocked" : "queued",
+      })));
+    }
   }
 
   function resetRun() {
@@ -214,6 +331,11 @@ function App() {
           <div>
             <p className="eyebrow">Operator workspace</p>
             <h1>Compliance proof desk</h1>
+            <p className={cx("daemon-state", daemonOnline ? "online" : "offline")}>
+              {daemonOnline
+                ? `Daemon connected at ${API_BASE}`
+                : `Daemon offline. Start it with: npm run cli -- daemon`}
+            </p>
           </div>
           <div className="topbar-actions">
             <button className="icon-button" onClick={resetRun} type="button" title="Reset run">
@@ -222,7 +344,7 @@ function App() {
             <button
               className="primary-action"
               onClick={runProofs}
-              disabled={!scan?.clean}
+              disabled={!scan?.clean || !daemonOnline}
               type="button"
             >
               <Play size={17} />
@@ -246,7 +368,9 @@ function App() {
                 </div>
 
                 <div className="preset-strip">
-                  {Object.entries(REGISTRY.presets).map(([id, item]) => (
+                  {Object.entries(registry.presets).map(([id, rawItem]) => {
+                    const item = presetView(id, rawItem);
+                    return (
                     <button
                       key={id}
                       className={cx("preset-chip", selectedPreset === id && "selected")}
@@ -260,7 +384,8 @@ function App() {
                       <span>{item.short}</span>
                       <small>{item.patterns.length}</small>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <textarea
@@ -310,7 +435,7 @@ function App() {
                 </div>
 
                 <div className="result-list">
-                  {(scan?.results ?? preset.patterns.map((id) => ({ id, ...REGISTRY.patterns[id] }))).map(
+                  {(scan?.results ?? preset.patterns.map((id) => ({ id, ...patternView(registry.patterns[id]) }))).map(
                     (item) => (
                       <div
                         key={item.id}
@@ -405,7 +530,7 @@ function App() {
                     onChange={(event) => setRegistryFilter(event.target.value)}
                   >
                     <option value="all">All presets</option>
-                    {Object.entries(REGISTRY.presets).map(([id, item]) => (
+                    {Object.entries(registry.presets).map(([id, item]) => (
                       <option key={id} value={id}>
                         {item.name}
                       </option>
@@ -544,10 +669,10 @@ function ReceiptFields({ receipt, commitment, expanded = false }) {
     ? [
         ["Commitment", receipt.commitment],
         ["Storage root", receipt.storageRoot],
-        ["Provider", receipt.providerAddress],
-        ["Model", receipt.modelId],
-        ["Registry", receipt.registry],
-        ["Chain", receipt.chain],
+        ["Job", receipt.jobId],
+        ["Status", receipt.status],
+        ["Patterns", String(receipt.patternIds?.length ?? 0)],
+        ["Created", receipt.createdAt],
       ]
     : [
         ["Commitment", commitment || "pending"],

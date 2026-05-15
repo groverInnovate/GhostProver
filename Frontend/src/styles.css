@@ -212,6 +212,20 @@ button:disabled {
   letter-spacing: 0;
 }
 
+.daemon-state {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.daemon-state.online {
+  color: var(--green);
+}
+
+.daemon-state.offline {
+  color: var(--red);
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
