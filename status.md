@@ -69,7 +69,54 @@
 
 **Issues:** None — all 5 tests green. Live 0G testnet deploy + storage upload pending a funded testnet wallet (low priority — uses same scripts as local).
 
-**Tomorrow's plan:**
-- Build React frontend (`Frontend/` — Vite + shadcn/ui).
-- Backend orchestrator endpoint: `POST /prove` → returns `{commitment, targetHash, proof, txHash, storageRoot}`.
-- Run live testnet demo end-to-end once wallet is funded.
+### 15 May 2026 (GhostProver v2 — Generic Pattern Detection)
+
+1. **Circuit upgraded to v2**: Added dual-mode support — `mode=0` (exact, same as before) and `mode=1` (pattern-based). New private inputs: `pattern_types[32]`, `pattern_values[32]`, `mode`. All 12 existing tests still pass unchanged (backward compatible). 5 new pattern-mode tests added. **17/17 tests pass.**
+2. **Character class matching**: Implemented `matches_class()` in Noir — 9 character classes: `EXACT`, `DIGIT`, `ALPHA_LOWER`, `ALPHA_UPPER`, `ALPHA`, `ALPHANUM`, `HEX`, `BASE64`, `ANY`. The sliding window now checks each byte against its character class instead of exact matching. This means the circuit can now prove "no 12-digit number exists in the prompt" without knowing which specific number.
+3. **`poseidon2_hash_64`**: New sponge hash for pattern descriptors (types ++ values = 64 elements). Binds the proof to the exact pattern checked — prevents pattern swapping attacks.
+4. **Pattern Registry** (`src/registry/`): JSON-based registry with 15 sensitive data patterns across 5 industry presets:
+   - `india_kyc` — Aadhar, PAN, Passport, Voter ID, Phone (5 patterns)
+   - `banking` — Aadhar, SSN, Credit Card, Routing Number, DOB (5 patterns)
+   - `healthcare` — SSN, NPI, DEA, DOB, Aadhar (5 patterns)
+   - `fintech` — CC, Aadhar, PAN, Stripe key, SSN (5 patterns)
+   - `saas` — AWS key, GitHub PAT, OpenAI key, Stripe key (4 patterns)
+5. **TS ↔ Noir hash cross-validation**: All pattern hashes match exactly between TypeScript (`@zkpassport/poseidon2`) and Noir circuit. Verified Aadhar hash `0x130c1035...` and PAN hash `0x14022726...` match byte-for-byte.
+6. **Batch Prover** (`src/batch-prover.ts`): `generateBatchProofs()` runs proofs for all patterns in a preset concurrently with configurable concurrency limit. `scanPrompt()` does instant pre-flight pattern detection — tested with Aadhar (offset 15), SSN (offset 16), AWS key (offset 8), PAN (offset 11), CC (offset 12). Zero false positives on clean prompts.
+7. **CLI Tool** (`src/cli.ts`): Full command-line interface:
+   - `ghostprover scan --preset banking --prompt "..."` — instant pattern scan
+   - `ghostprover prove --preset saas --prompt "..."` — batch ZK proof generation
+   - `ghostprover init` — creates `.ghostprover.json` config
+   - `ghostprover list-presets` / `list-patterns --preset saas`
+8. **Express Middleware** (`src/middleware.ts`): Drop-in middleware that intercepts AI API calls, scans prompts, and generates proofs in the background. Supports OpenAI/Anthropic request formats, blocking mode, and adds `X-GhostProver-Commitment` headers.
+9. **Updated SDK exports**: `generatePatternProof()`, `computePatternHash()`, `scanPrompt()`, `generateBatchProofs()`, `ghostProverMiddleware()` — all exported from `src/index.ts`.
+
+**Summary — GhostProver is now a generic, pattern-based compliance engine. Companies pick a preset, and proofs are generated automatically for all sensitive data patterns in the background.**
+
+**Issues:** None — 17 circuit tests pass, all TS sanity tests pass, CLI works end-to-end.
+
+**Tomorrow's Plan:**
+- Build React frontend (`Frontend/` — dashboard for preset selection + live proof status).
+- End-to-end integration test: pattern-mode proof → on-chain batch receipt.
+
+---
+
+# Component Status (15 May 2026)
+
+| Component | Status | Owner |
+|---|---|---|
+| Noir ZK Circuit (v2 — dual mode) | ✅ Complete — 17 tests pass, exact + pattern mode | P1 |
+| Character class matching | ✅ Complete — 9 classes, `matches_class()` in Noir | P1 |
+| Poseidon2 sponge hash (512, 32, 64) | ✅ Complete — TS ↔ Noir cross-validated | P1 |
+| Sliding window non-inclusion | ✅ Complete — dual mode, ~46k gates (pattern) | P1 |
+| Pattern Registry (15 patterns, 5 presets) | ✅ Complete — JSON + TS loader/validator | P1 |
+| Batch Prover (parallel proofs) | ✅ Complete — concurrency control + pre-flight scan | P1 |
+| CLI Tool (scan/prove/init) | ✅ Complete — full command-line interface | P1 |
+| Express Middleware | ✅ Complete — auto-intercept + background proofs | P1 |
+| GhostProverRegistry.sol | ✅ Complete — 5 tests pass, 0G fields wired | P1 |
+| Verifier.sol (Honk) | ✅ Generated — do not edit | auto |
+| Local Anvil demo | ✅ Working — proof → deploy → receipt | P1 |
+| 0G Compute SDK wiring | ✅ Mock + live inference, TEE verify helper | P3 |
+| 0G Chain testnet deploy | ✅ Deploy0GTestnet.s.sol ready | P2 |
+| 0G Storage integration | ✅ storage.ts (upload + Merkle root) | P3 |
+| Orchestrator backend | ✅ orchestrator.ts wires full pipeline | P3 |
+| React frontend | 🔨 In Progress | P1 |

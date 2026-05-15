@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GhostProver — ZK Compliance Attestation</title>
+  <meta name="description" content="Privacy-preserving compliance attestation for AI inference. Generate ZK proofs that sensitive data never leaked into AI prompts.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background -->
+  <div class="ambient-bg">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div id="app">
+    <!-- Nav -->
+    <nav class="nav">
+      <div class="nav-brand">
+        <span class="nav-icon">🔐</span>
+        <span class="nav-title">GhostProver</span>
+        <span class="nav-badge">v2</span>
+      </div>
+      <div class="nav-links">
+        <a href="#scan" class="nav-link active" data-tab="scan">Scan</a>
+        <a href="#registry" class="nav-link" data-tab="registry">Registry</a>
+        <a href="#history" class="nav-link" data-tab="history">History</a>
+      </div>
+    </nav>
+
+    <!-- Hero -->
+    <header class="hero">
+      <h1 class="hero-title">
+        Zero-Knowledge<br>
+        <span class="hero-gradient">Compliance Engine</span>
+      </h1>
+      <p class="hero-sub">Prove your AI prompts never contained sensitive data — without revealing the prompt itself.</p>
+    </header>
+
+    <!-- Tab: Scan -->
+    <section id="tab-scan" class="tab-content active">
+      <!-- Preset Selector -->
+      <div class="card preset-card">
+        <div class="card-header">
+          <h2 class="card-title">Industry Preset</h2>
+          <p class="card-desc">Select your compliance profile</p>
+        </div>
+        <div class="preset-grid" id="preset-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Prompt Input -->
+      <div class="card prompt-card">
+        <div class="card-header">
+          <h2 class="card-title">Prompt Scanner</h2>
+          <p class="card-desc">Enter or paste the AI prompt to analyze</p>
+        </div>
+        <div class="prompt-input-wrap">
+          <textarea id="prompt-input" class="prompt-input" placeholder="Type or paste your AI prompt here..." rows="4" maxlength="512"></textarea>
+          <div class="prompt-meta">
+            <span id="byte-count" class="byte-count">0 / 512 bytes</span>
+            <button id="scan-btn" class="btn btn-primary" disabled>
+              <span class="btn-icon">⚡</span>
+              Scan Prompt
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="card results-card" id="results-card" style="display:none;">
+        <div class="card-header">
+          <h2 class="card-title" id="results-title">Scan Results</h2>
+          <div id="results-badge" class="results-badge"></div>
+        </div>
+        <div id="commitment-display" class="commitment-display" style="display:none;">
+          <span class="commitment-label">Commitment</span>
+          <code class="commitment-hash" id="commitment-hash"></code>
+        </div>
+        <div class="results-list" id="results-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab: Registry -->
+    <section id="tab-registry" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Pattern Registry</h2>
+          <p class="card-desc">15 sensitive data patterns across 5 industries</p>
+        </div>
+        <div class="registry-filter">
+          <select id="registry-filter" class="select-input">
+            <option value="all">All Patterns</option>
+          </select>
+        </div>
+        <div class="registry-grid" id="registry-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab: History -->
+    <section id="tab-history" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Proof History</h2>
+          <p class="card-desc">Recent compliance attestations</p>
+        </div>
+        <div id="history-list" class="history-list">
+          <div class="empty-state">
+            <span class="empty-icon">📋</span>
+            <p>No proofs generated yet.</p>
+            <p class="empty-sub">Scan a prompt to get started.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>Built with <span class="footer-heart">Noir</span> circuits + <span class="footer-heart">Poseidon2</span> hashing on <span class="footer-heart">0G Chain</span></p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,14 +1,22 @@
 {
   "name": "ghostprover",
-  "version": "0.1.0",
-  "description": "Privacy-preserving compliance attestation layer for AI inference - ZK proof of non-membership",
+  "version": "0.2.0",
+  "description": "Privacy-preserving compliance attestation layer for AI inference - ZK proof of non-membership with pattern-based detection",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "ghostprover": "./dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
-    "sanity-test": "npx tsx src/sanity-test.ts",
-    "test:hashes": "npx tsx src/sanity-test.ts",
+    "cli": "node --import tsx src/cli.ts",
+    "sanity-test": "node --import tsx src/sanity-test.ts",
+    "test:hashes": "node --import tsx src/sanity-test.ts",
+    "test:patterns": "node --import tsx src/pattern-sanity-test.ts",
+    "test:scan": "node --import tsx src/batch-scan-test.ts",
+    "circuit:compile": "cd Circuit/ghostprover && nargo compile",
+    "circuit:test": "cd Circuit/ghostprover && nargo test",
     "demo:fixture": "cd Compute && npm run demo:fixture",
     "demo:test": "cd Compute && npm run demo:test"
   },
