@@ -142,11 +142,18 @@ export function ghostProverMiddleware(config: GhostProverMiddlewareConfig) {
       return next();
     }
 
-    // Truncate to 512 bytes (circuit limit)
     const encoder = new TextEncoder();
-    let promptBytes = encoder.encode(promptText);
+    const promptBytes = encoder.encode(promptText);
     if (promptBytes.length > 512) {
-      promptBytes = promptBytes.slice(0, 512);
+      res.writeHead(413, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          error: "Prompt exceeds GhostProver's 512-byte circuit limit",
+          byteLength: promptBytes.length,
+          maxBytes: 512,
+        })
+      );
+      return;
     }
 
     // Scan

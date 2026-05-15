@@ -51,7 +51,7 @@ export const DEFAULT_CONFIG: GhostProverConfig = {
   },
   onChainSubmit: false,
   registryAddress: "",
-  rpcUrl: "https://evmrpc-testnet.0g.ai",
+  rpcUrl: "https://evmrpc.0g.ai",
 };
 
 function isObject(value: unknown): value is Record<string, unknown> {

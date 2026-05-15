@@ -19,7 +19,7 @@
  *   REGISTRY_ADDRESS    — GhostProverRegistry contract address
  *   ZG_RPC_URL          — 0G Chain RPC (or local Anvil http://127.0.0.1:8545)
  *   PRIVATE_KEY         — wallet for on-chain tx
- *   ZG_INDEXER_URL      — 0G Storage indexer (optional, defaults to testnet)
+ *   ZG_INDEXER_URL      — 0G Storage indexer (optional, network-aware default)
  */
 import 'dotenv/config';
 import express, { type Request, type Response } from 'express';
@@ -32,6 +32,12 @@ import { orchestrate } from './orchestrator.js';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const SAMPLES_DIR = path.resolve(process.cwd(), 'samples');
+const DEFAULT_INDEXER =
+  process.env.ZG_INDEXER_URL ??
+  ((process.env.ZG_NETWORK?.toLowerCase() === 'mainnet' ||
+    (process.env.ZG_RPC_URL?.includes('evmrpc.0g.ai') && !process.env.ZG_RPC_URL.includes('testnet')))
+    ? 'https://indexer-storage-turbo.0g.ai'
+    : 'https://indexer-storage-testnet-standard.0g.ai');
 
 const app = express();
 app.use(cors());
@@ -67,8 +73,8 @@ app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     registry: process.env.REGISTRY_ADDRESS ?? null,
-    rpc: process.env.ZG_RPC_URL ?? 'http://127.0.0.1:8545',
-    indexer: process.env.ZG_INDEXER_URL ?? 'https://indexer-storage-testnet-standard.0g.ai',
+    rpc: process.env.ZG_RPC_URL ?? 'https://evmrpc.0g.ai',
+    indexer: DEFAULT_INDEXER,
     hasPrivateKey: Boolean(process.env.PRIVATE_KEY),
     samplesAvailable: fs.existsSync(SAMPLES_DIR) ? fs.readdirSync(SAMPLES_DIR).filter((f) => f.endsWith('.log.json')).length : 0,
   });
@@ -132,9 +138,9 @@ app.post('/api/inference/mock', async (req, res) => {
 // POST /api/prove — run the pipeline, return result when done
 // -----------------------------------------------------------------------------
 app.post('/api/prove', async (req, res) => {
-  const { prompt, target, samplePath, skipProof, skipStorage, skipOnChain } = req.body ?? {};
-  if (!target || typeof target !== 'string') {
-    res.status(400).json({ error: 'target is required (string)' });
+  const { prompt, target, preset, patterns, samplePath, skipProof, skipStorage, skipOnChain, allowUnverified } = req.body ?? {};
+  if ((!target || typeof target !== 'string') && !preset && !Array.isArray(patterns)) {
+    res.status(400).json({ error: 'target, preset, or patterns is required' });
     return;
   }
 
@@ -142,10 +148,13 @@ app.post('/api/prove', async (req, res) => {
     const result = await orchestrate({
       prompt,
       target,
+      preset,
+      patternIds: Array.isArray(patterns) ? patterns : undefined,
       samplePath,
       skipProof: Boolean(skipProof),
       skipStorage: Boolean(skipStorage),
       skipOnChain: Boolean(skipOnChain),
+      allowUnverified: Boolean(allowUnverified),
     });
     res.json(result);
   } catch (err) {
@@ -157,9 +166,9 @@ app.post('/api/prove', async (req, res) => {
 // POST /api/prove/stream — run the pipeline, stream progress via SSE
 // -----------------------------------------------------------------------------
 app.post('/api/prove/stream', async (req, res) => {
-  const { prompt, target, samplePath, skipStorage, skipOnChain } = req.body ?? {};
-  if (!target || typeof target !== 'string') {
-    res.status(400).json({ error: 'target is required (string)' });
+  const { prompt, target, preset, patterns, samplePath, skipStorage, skipOnChain, allowUnverified } = req.body ?? {};
+  if ((!target || typeof target !== 'string') && !preset && !Array.isArray(patterns)) {
+    res.status(400).json({ error: 'target, preset, or patterns is required' });
     return;
   }
 
@@ -191,8 +200,8 @@ app.post('/api/prove/stream', async (req, res) => {
     'loaded inference log': { stage: 'inference', progress: 15 },
     'commitment:': { stage: 'commitment', progress: 25 },
     'TEE attestation': { stage: 'attestation', progress: 35 },
-    'wrote': { stage: 'prover.toml', progress: 45 },
     'generating ZK proof': { stage: 'proof', progress: 55 },
+    'generating batch ZK proofs': { stage: 'proof', progress: 55 },
     'proof generated': { stage: 'proof-done', progress: 80 },
     'storage root': { stage: 'storage', progress: 90 },
     'receipt submitted': { stage: 'on-chain', progress: 98 },
@@ -222,9 +231,12 @@ app.post('/api/prove/stream', async (req, res) => {
     const result = await orchestrate({
       prompt,
       target,
+      preset,
+      patternIds: Array.isArray(patterns) ? patterns : undefined,
       samplePath,
       skipStorage: Boolean(skipStorage),
       skipOnChain: Boolean(skipOnChain),
+      allowUnverified: Boolean(allowUnverified),
     });
     job.status = 'done';
     job.stage = 'complete';
@@ -251,7 +263,8 @@ app.post('/api/prove/stream', async (req, res) => {
 // GET /api/receipt/:txHash — fetch on-chain receipt event
 // -----------------------------------------------------------------------------
 const RECEIPT_EVENT_ABI = [
-  'event ComplianceReceiptIssued(address indexed submitter,bytes32 commitment,bytes32 targetHash,address indexed provider,string model,bytes32 storageRoot,uint256 timestamp)',
+  'event ComplianceReceiptIssued(bytes32 indexed commitment,bytes32 indexed targetHash,address indexed submitter,address providerAddress,string modelId,bytes32 storageRoot,uint256 timestamp)',
+  'event ComplianceBatchReceiptIssued(bytes32 indexed commitment,bytes32[] targetHashes,address indexed submitter,address providerAddress,string modelId,bytes32 storageRoot,uint256 timestamp)',
 ];
 
 app.get('/api/receipt/:txHash', async (req, res) => {
@@ -275,8 +288,9 @@ app.get('/api/receipt/:txHash', async (req, res) => {
               submitter: parsed.args.submitter,
               commitment: parsed.args.commitment,
               targetHash: parsed.args.targetHash,
-              provider: parsed.args.provider,
-              model: parsed.args.model,
+              targetHashes: parsed.args.targetHashes,
+              provider: parsed.args.providerAddress,
+              model: parsed.args.modelId,
               storageRoot: parsed.args.storageRoot,
               timestamp: parsed.args.timestamp.toString(),
             },

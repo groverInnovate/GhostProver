@@ -6,6 +6,7 @@ import { loadEffectiveRegistry, loadGhostProverConfig, resolvePolicyPatternIds }
 import { LocalStore, type StoredJob, type StoredReceipt } from "./local-store.js";
 
 const encoder = new TextEncoder();
+const PROMPT_MAX_BYTES = 512;
 
 function sha256Hex(input: string): string {
   return `0x${createHash("sha256").update(input).digest("hex")}`;
@@ -22,7 +23,7 @@ function jobFromScan(
   prompt: string,
   registry = loadEffectiveRegistry(loadGhostProverConfig())
 ): StoredJob {
-  const promptBytes = encoder.encode(prompt).slice(0, 512);
+  const promptBytes = encodePromptForCircuit(prompt);
   const results = scanPatternIds(promptBytes, patternIds, registry);
   const createdAt = nowIso();
   return {
@@ -45,6 +46,16 @@ function jobFromScan(
     createdAt,
     updatedAt: createdAt,
   };
+}
+
+function encodePromptForCircuit(prompt: string): Uint8Array {
+  const bytes = encoder.encode(prompt);
+  if (bytes.length > PROMPT_MAX_BYTES) {
+    throw new Error(
+      `Prompt exceeds GhostProver's ${PROMPT_MAX_BYTES}-byte circuit limit: ${bytes.length} bytes`
+    );
+  }
+  return bytes;
 }
 
 function receiptForJob(job: StoredJob, patternIds: string[]): StoredReceipt {

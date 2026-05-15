@@ -175,6 +175,37 @@ The local receipt demo is intentionally partial:
 The missing integration step is the eventual binding between the proof
 commitment and a real TEE-attested request identity from 0G Compute.
 
+## 0G mainnet runbook
+
+Use Node 20+ for the current 0G Compute SDKs.
+
+```bash
+# terminal 1: configure live Compute
+cd Compute
+cp .env.example .env
+# Fill PRIVATE_KEY. Keep ZG_NETWORK=mainnet and ZG_RPC_URL=https://evmrpc.0g.ai.
+npm install
+npm run list-services
+npm run attest
+npm run inference -- "In one sentence, explain zero-knowledge proofs."
+
+# terminal 2: deploy the receipt registry to 0G mainnet
+cd Chain
+forge script script/Deploy0G.s.sol:Deploy0G \
+  --rpc-url https://evmrpc.0g.ai \
+  --private-key $PRIVATE_KEY \
+  --broadcast
+
+# terminal 3: submit a GhostProver receipt for the latest live sample
+cd Compute
+# copy Chain/deployments/0g-mainnet.json registry into REGISTRY_ADDRESS first
+npm run orchestrate -- --preset saas
+```
+
+If an SDK cannot auto-detect mainnet contracts, set `ZG_LEDGER_CA`,
+`ZG_INFERENCE_CA`, and `ZG_FINE_TUNING_CA` in `Compute/.env`. Live receipt
+submission refuses unverified TEE samples unless `--allow-unverified` is passed.
+
 
 ```text
 ├── src/

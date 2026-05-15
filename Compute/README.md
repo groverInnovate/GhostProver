@@ -1,31 +1,32 @@
 # GhostProver — Compute
 
-Thin TypeScript harness around `@0glabs/0g-serving-broker` to run inference on
-the 0G Compute Network, capture the raw response + `zerogAuth` TEE attestation
-header, and feed the result into the Noir circuit via the **bridge**.
+TypeScript harness around the 0G Compute Direct SDK. It runs live mainnet
+inference, verifies provider/response TEE attestations through the SDK, archives
+the audit bundle to 0G Storage, and submits GhostProver receipts on 0G Chain.
 
 ## Setup
 
 ```bash
 cd Compute
-cp .env.example .env          # fill PRIVATE_KEY with a funded testnet key
+cp .env.example .env          # fill PRIVATE_KEY with a funded mainnet key
 npm install
 ```
 
-Faucet: https://faucet.0g.ai — wallet needs gas + at least `INITIAL_DEPOSIT`
-(default 1) 0G credited into the Compute ledger.
+Use Node 20+ for the current 0G SDKs. The wallet needs mainnet 0G for gas,
+Compute ledger funding, provider sub-account transfer, Storage upload, and
+Registry deployment.
 
 ## Commands
 
 ```bash
-# --- Live inference (requires a live 0G testnet/mainnet provider) ---
+# --- Live inference (mainnet by default in .env.example) ---
 npm run inference             # writes samples/inference-*.log.json
 npm run inference -- "Your custom prompt here."
 npm run attest                # dumps verifyService() TEE attestation to reports/
 npm run list-services         # lists broker-visible services
 
 # --- Mock inference (no provider needed — same output shape as live) ---
-npm run inference:mock        # writes samples/inference-*.log.json  ← use this when testnet is down
+npm run inference:mock        # writes samples/inference-*.log.json
 npm run inference:mock -- "Custom prompt"
 
 # --- Bridge: Compute → Circuit ---
@@ -41,6 +42,32 @@ npm run bridge -- --target "secret" --sample samples/inference-XYZ.log.json
 ```bash
 npm run inference:mock && npm run bridge -- --target "234567890123"
 cd ../Circuit/ghostprover && nargo execute   # witness solved ✓
+```
+
+### Full end-to-end (mainnet path)
+
+```bash
+# 1. Confirm provider discovery on mainnet.
+npm run list-services
+
+# 2. Verify the selected provider's TEE service.
+npm run attest
+
+# 3. Run live inference and require processResponse() to pass.
+npm run inference -- "In one sentence, explain zero-knowledge proofs."
+
+# 4. Deploy the GhostProver registry on 0G mainnet from ../Chain, then copy
+#    deployments/0g-mainnet.json.registry into REGISTRY_ADDRESS in Compute/.env.
+cd ../Chain
+forge script script/Deploy0G.s.sol:Deploy0G \
+  --rpc-url https://evmrpc.0g.ai \
+  --private-key $PRIVATE_KEY \
+  --broadcast
+
+# 5. Submit an exact receipt or a preset batch receipt from Compute.
+cd ../Compute
+npm run orchestrate -- --target "234567890123"
+npm run orchestrate -- --preset saas
 ```
 
 ## Architecture
@@ -69,20 +96,38 @@ inference       ──┴──▶  samples/inference-<ts>.log.json
 - `teeVerified` — `broker.inference.processResponse()` result (TEE sig valid).
 - `chatID` — response ID used for `processResponse`.
 
-## Mainnet migration path
+## Mainnet contract configuration
 
-`@0glabs/0g-serving-broker@0.4.4` has **hardcoded testnet contract addresses**.
-When mainnet Compute launches, either:
+The adapter prefers `@0gfoundation/0g-compute-ts-sdk` and falls back to
+`@0glabs/0g-serving-broker`. If your installed SDK can auto-detect mainnet from
+`ZG_RPC_URL=https://evmrpc.0g.ai`, no contract env vars are needed. If it cannot,
+set all three:
 
-1. Upgrade to a newer SDK version that auto-detects the chain, **OR**
-2. Pass mainnet contract addresses explicitly:
-   ```ts
-   createZGComputeNetworkBroker(wallet, LEDGER_CA, INFERENCE_CA, FINE_TUNING_CA)
-   ```
-   and set `ZG_RPC_URL=https://evmrpc.0g.ai` in `.env`.
+```bash
+ZG_LEDGER_CA=0x...
+ZG_INFERENCE_CA=0x...
+ZG_FINE_TUNING_CA=0x...
+```
 
-No other code changes needed — `inference.ts`, `mock-inference.ts`, and
-`bridge.ts` all read `ZG_RPC_URL` from `.env` and are network-agnostic.
+On mainnet, old hardcoded-testnet SDKs fail fast instead of silently using the
+wrong contracts.
+
+## Troubleshooting
+
+- **No providers**: run `npm run list-services`, confirm `ZG_NETWORK=mainnet`,
+  `ZG_RPC_URL=https://evmrpc.0g.ai`, and relax `MODEL_FILTER` or set
+  `PROVIDER_ADDRESS`.
+- **Missing contracts**: install the latest SDK or set all three `ZG_*_CA`
+  addresses.
+- **Insufficient balance**: set `INITIAL_DEPOSIT=3` for first ledger creation
+  and `PROVIDER_TRANSFER_AMOUNT` to fund the selected provider sub-account.
+- **Attestation failure**: `npm run inference` records `providerVerified` and
+  `teeVerified`; `npm run orchestrate` refuses live unverified samples unless
+  `--allow-unverified` is passed for diagnostics.
+- **Storage upload failure**: mainnet orchestration refuses to submit a receipt
+  with a local-only root unless `ALLOW_LOCAL_STORAGE_ROOT=true` is set for
+  diagnostics.
+- **Node engine warning**: use Node 20+ for live SDK calls.
 
 ## Next (Phase 2 hand-off)
 

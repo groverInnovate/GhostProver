@@ -10,7 +10,7 @@ async function main() {
 
   const services = await listServicesWithSummary(broker);
   if (services.length === 0) {
-    console.log('[hint] No services are visible from the broker right now. Try again later, confirm the testnet RPC, or check whether the SDK version matches the current 0G environment.');
+    console.log('[hint] No services are visible from the broker right now. Confirm ZG_NETWORK/ZG_RPC_URL, contract env vars if required, and that the SDK version matches the selected 0G environment.');
   }
 }
 

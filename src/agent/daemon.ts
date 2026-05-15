@@ -38,6 +38,7 @@ interface ScanResponse {
 }
 
 type SseClient = http.ServerResponse;
+const PROMPT_MAX_BYTES = 512;
 
 /**
  * Start the local GhostProver compliance agent.
@@ -196,7 +197,7 @@ function scanRequest(
     throw new Error("Request body must include a non-empty string prompt");
   }
 
-  const promptBytes = new TextEncoder().encode(prompt).slice(0, 512);
+  const promptBytes = encodePromptForCircuit(prompt);
   const preset = body.preset ?? config.preset;
   const patternIds = body.patterns?.length
     ? body.patterns
@@ -273,7 +274,7 @@ async function runProofJob(
   broadcast(state.clients, "job", current);
 
   try {
-    const promptBytes = new TextEncoder().encode(prompt).slice(0, 512);
+    const promptBytes = encodePromptForCircuit(prompt);
     const result = await generateBatchProofs({
       promptBytes,
       patternIds: current.patternIds,
@@ -370,6 +371,16 @@ function createReceipt(
 
 function sha256Hex(input: string): string {
   return `0x${createHash("sha256").update(input).digest("hex")}`;
+}
+
+function encodePromptForCircuit(prompt: string): Uint8Array {
+  const bytes = new TextEncoder().encode(prompt);
+  if (bytes.length > PROMPT_MAX_BYTES) {
+    throw new Error(
+      `Prompt exceeds GhostProver's ${PROMPT_MAX_BYTES}-byte circuit limit: ${bytes.length} bytes`
+    );
+  }
+  return bytes;
 }
 
 function setCors(res: http.ServerResponse) {
