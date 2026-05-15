@@ -266,6 +266,19 @@ button:disabled {
   border-color: #dbe3ed;
 }
 
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -8px 0 20px;
+  padding: 11px 14px;
+  color: var(--red);
+  background: var(--red-soft);
+  border: 1px solid #f3b5b0;
+  border-radius: var(--radius);
+  font-weight: 700;
+}
+
 .console-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.65fr);
@@ -599,6 +612,92 @@ button:disabled {
   border: 1px solid #b8decf;
   border-radius: var(--radius);
   font-weight: 800;
+}
+
+.submission-panel {
+  overflow: hidden;
+}
+
+.submission-status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 9px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.submission-status code {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--muted);
+  font: 12px var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-list {
+  display: grid;
+  gap: 8px;
+}
+
+.workflow-step {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.workflow-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  border-radius: 7px;
+}
+
+.workflow-step.done .workflow-icon {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.workflow-step.active .workflow-icon {
+  color: var(--blue);
+  background: #eaf1ff;
+}
+
+.workflow-step.blocked .workflow-icon {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.workflow-step strong,
+.submission-status strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-step span {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--faint);
+  font: 12px var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .registry-surface {

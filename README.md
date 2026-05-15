@@ -4,6 +4,27 @@ An enterprise-grade, privacy-preserving compliance attestation layer for AI infe
 
 GhostProver v2 proves that sensitive data (like Aadhar numbers, PAN cards, AWS API keys, or Credit Card numbers) was **not** present in an AI prompt, without revealing the prompt or the sensitive data itself.
 
+## Judge Quickstart
+
+Run the background-agent demo in three terminals:
+
+```bash
+# terminal 1: seed a clean judge-mode audit trail
+npm run demo:judge
+
+# terminal 2: start the local compliance daemon
+npm run daemon
+
+# terminal 3: start the React operator console
+cd Frontend && npm run dev
+```
+
+Open `http://127.0.0.1:5173`, show the seeded receipt history, scan the clean sample, then scan the risk sample. For a real one-pattern proof acceptance run:
+
+```bash
+npm run test:proof:single
+```
+
 ## How it works
 
 A Zero-Knowledge (Noir) circuit proves:
@@ -16,16 +37,25 @@ The result is a cryptographically verifiable **Batch Compliance Receipt** issued
 
 ## Architecture
 
-```
-User Prompt (private)  ─┐
-                        ├─► Noir Circuit ─► ZK Proofs ─► Verifier.sol ─► GhostProverRegistry (Batch Receipt)
-Pattern Types (private) ┘
+```mermaid
+flowchart LR
+  User["Developer in Claude Code / Codex / Antigravity"] --> MCP["GhostProver MCP tools"]
+  Console["React operator console"] --> Daemon["Local daemon\nHTTP + SSE"]
+  MCP --> Daemon
+  Daemon --> Policy[".ghostprover.json\npolicy + custom registry"]
+  Policy --> Scan["Pattern scan\nprivate prompt bytes"]
+  Scan -->|Sensitive data found| Block["Block response\npersist blocked job"]
+  Scan -->|Clean prompt| Queue["Background proof job"]
+  Queue --> Batch["Batch prover\nNoir + bb.js"]
+  Batch --> Receipt["Local JSONL receipt\nstorageRoot preview"]
+  Receipt --> Future0G["Future adapter\n0G Storage + Chain"]
+  Daemon --> Console
 ```
 
 ## Features
 
 - **Generic Pattern Matching**: 9 built-in character classes (`DIGIT`, `ALPHA`, `ALPHANUM`, `BASE64`, etc.) evaluated in-circuit.
-- **Industry Presets**: Built-in registries for `india_kyc`, `banking`, `fintech`, `healthcare`, and `saas`.
+- **Industry Presets**: Built-in registries for `india_kyc`, `banking`, `fintech`, `healthcare`, and `saas`, plus project-local custom registries.
 - **Parallel Batch Prover**: Generates multiple non-inclusion proofs concurrently for a single prompt commitment.
 - **On-chain Batch Receipts**: Smart contract logic (`submitBatchReceipt`) groups all proofs into a single gas-efficient transaction.
 - **Express Middleware**: Drop-in `ghostProverMiddleware()` for automatic AI request interception and background attestation.
@@ -54,7 +84,15 @@ npm run daemon
 npm run mcp
 ```
 
-See [`docs/background-agent-workflow.md`](docs/background-agent-workflow.md) for the daemon/MCP workflow, local API, JSONL receipt store, and flowchart.
+Core docs:
+
+- [`docs/background-agent-workflow.md`](docs/background-agent-workflow.md) — daemon/MCP workflow and flowchart.
+- [`docs/api.md`](docs/api.md) — local daemon API contract.
+- [`docs/mcp-setup.md`](docs/mcp-setup.md) — Claude Code / Codex / Antigravity MCP setup notes.
+- [`docs/demo-script.md`](docs/demo-script.md) — 3-minute judge demo script.
+- [`docs/limitations.md`](docs/limitations.md) — current limitations and winner-track upgrades.
+
+Custom registry examples live in [`examples/custom-registry.json`](examples/custom-registry.json) and [`examples/.ghostprover.custom.example.json`](examples/.ghostprover.custom.example.json).
 
 ### Express Middleware
 ```typescript
@@ -145,8 +183,8 @@ commitment and a real TEE-attested request identity from 0G Compute.
 │   ├── cli.ts            # GhostProver terminal interface
 │   ├── middleware.ts     # Express.js drop-in integration
 │   ├── poseidon2.ts      # Pure TypeScript BN254 zero-knowledge hashing
-│   ├── agent/            # Local daemon, config, JSONL store, MCP bridge
-│   └── registry/         # Industry presets and pattern definitions
+│   ├── registry/         # Industry presets and pattern definitions
+│   └── agent/            # Daemon, MCP bridge, local store, judge/test scripts
 ├── Circuit/ghostprover/
 │   ├── src/main.nr       # ZK circuit (Dual-mode non-inclusion + character classes)
 │   └── target/           # Auto-generated verification keys & Solidity Verifier
@@ -156,7 +194,14 @@ commitment and a real TEE-attested request identity from 0G Compute.
 ├── Frontend/
 │   └── src/              # React operator console connected to the daemon
 ├── docs/
-│   └── background-agent-workflow.md  # Daemon/MCP workflow and flowchart
+│   ├── background-agent-workflow.md  # Daemon/MCP workflow and flowchart
+│   ├── api.md                       # Local daemon API
+│   ├── mcp-setup.md                 # Coding-agent integration setup
+│   ├── demo-script.md               # Hackathon demo script
+│   └── limitations.md               # Known limitations and next upgrades
+├── examples/
+│   ├── custom-registry.json         # Company-specific registry example
+│   └── .ghostprover.custom.example.json
 └── Compute/
     ├── src/mock-inference.ts         # TEE envelope simulation
     └── src/orchestrator.ts           # Full inference + attestation pipeline

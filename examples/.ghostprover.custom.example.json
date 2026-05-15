@@ -1,0 +1,18 @@
+{
+  "preset": "acme_internal",
+  "patterns": [],
+  "customRegistryPath": "examples/custom-registry.json",
+  "blockOnDetection": true,
+  "proofMode": "background",
+  "concurrency": 1,
+  "daemon": {
+    "host": "127.0.0.1",
+    "port": 8787
+  },
+  "storage": {
+    "dir": ".ghostprover"
+  },
+  "onChainSubmit": false,
+  "registryAddress": "",
+  "rpcUrl": "https://evmrpc-testnet.0g.ai"
+}

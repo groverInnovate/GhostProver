@@ -111,6 +111,8 @@ function App() {
   const [commitment, setCommitment] = useState("");
   const [proofRun, setProofRun] = useState([]);
   const [receipt, setReceipt] = useState(null);
+  const [latestJob, setLatestJob] = useState(null);
+  const [apiError, setApiError] = useState("");
   const [history, setHistory] = useState(loadHistory);
   const [registryFilter, setRegistryFilter] = useState("all");
   const [registrySearch, setRegistrySearch] = useState("");
@@ -144,6 +146,7 @@ function App() {
         setRegistry(nextRegistry);
         setSelectedPreset(nextConfig.preset ?? "saas");
         setDaemonOnline(true);
+        setApiError("");
         setReceipt(receipts.receipts[0] ?? null);
         setHistory(
           receipts.receipts.map((item) => ({
@@ -161,6 +164,7 @@ function App() {
         eventSource.addEventListener("job", (event) => {
           const job = JSON.parse(event.data);
           if (!job.scan?.results) return;
+          setLatestJob(job);
           setProofRun(job.patternIds.map((id) => {
             const result = job.scan.results.find((item) => item.id === id);
             const latest = [...job.progress].reverse().find((item) => item.patternId === id);
@@ -181,6 +185,7 @@ function App() {
         eventSource.addEventListener("receipt", (event) => {
           const nextReceipt = JSON.parse(event.data);
           setReceipt(nextReceipt);
+          setLatestJob((current) => current ? { ...current, status: "done", receiptId: nextReceipt.id } : current);
           setHistory((current) => [
             {
               id: nextReceipt.id,
@@ -197,6 +202,7 @@ function App() {
         });
       } catch {
         setDaemonOnline(false);
+        setApiError("Daemon is offline. Start the local agent with npm run daemon.");
       }
     }
 
@@ -225,6 +231,10 @@ function App() {
   }, [registry, registryFilter, registrySearch]);
 
   async function runScan() {
+    if (!daemonOnline) {
+      setApiError("Daemon is offline. Start the local agent with npm run daemon.");
+      return;
+    }
     const response = await fetch(`${API_BASE}/v1/scan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -232,9 +242,11 @@ function App() {
     });
     if (!response.ok) {
       setDaemonOnline(false);
+      setApiError("Scan failed because the daemon did not respond.");
       return;
     }
     const payload = await response.json();
+    setApiError("");
     const nextScan = adaptScan(payload, registry);
     setScan(nextScan);
     setCommitment(payload.commitment);
@@ -250,6 +262,10 @@ function App() {
 
   async function runProofs() {
     if (!scan || !scan.clean) return;
+    if (!daemonOnline) {
+      setApiError("Daemon is offline. Start the local agent with npm run daemon.");
+      return;
+    }
 
     setProofRun(scan.results.map((result) => ({ ...result, status: "queued", proofSize: 0 })));
     const response = await fetch(`${API_BASE}/v1/attest`, {
@@ -259,9 +275,12 @@ function App() {
     });
     if (!response.ok) {
       setDaemonOnline(false);
+      setApiError("Attestation failed because the daemon did not respond.");
       return;
     }
     const payload = await response.json();
+    setApiError("");
+    setLatestJob(payload.job);
     if (payload.blocked) {
       setScan(adaptScan(payload.scan, registry));
       setProofRun(payload.job.scan.results.map((result) => ({
@@ -275,6 +294,8 @@ function App() {
     setScan(null);
     setProofRun([]);
     setReceipt(null);
+    setLatestJob(null);
+    setApiError("");
     setCommitment("");
   }
 
@@ -353,6 +374,13 @@ function App() {
           </div>
         </header>
 
+        {apiError && (
+          <div className="error-banner" role="status">
+            <AlertTriangle size={17} />
+            <span>{apiError}</span>
+          </div>
+        )}
+
         {activeTab === "console" && (
           <section className="console-grid">
             <div className="main-column">
@@ -401,17 +429,29 @@ function App() {
 
                 <div className="intake-actions">
                   <div className="sample-buttons">
-                    <button type="button" onClick={() => setPrompt(SAMPLE_PROMPTS.clean)}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrompt(SAMPLE_PROMPTS.clean);
+                        resetRun();
+                      }}
+                    >
                       Clean sample
                     </button>
-                    <button type="button" onClick={() => setPrompt(SAMPLE_PROMPTS.risky)}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrompt(SAMPLE_PROMPTS.risky);
+                        resetRun();
+                      }}
+                    >
                       Risk sample
                     </button>
                   </div>
                   <button
                     className="scan-button"
                     type="button"
-                    disabled={promptBytes === 0}
+                    disabled={promptBytes === 0 || !daemonOnline}
                     onClick={runScan}
                   >
                     <FileSearch size={18} />
@@ -469,6 +509,15 @@ function App() {
             </div>
 
             <aside className="side-column">
+              <SubmissionProofPanel
+                config={config}
+                daemonOnline={daemonOnline}
+                latestJob={latestJob}
+                receipt={receipt}
+                scan={scan}
+                selectedPreset={selectedPreset}
+              />
+
               <MetricGrid
                 cleanCount={cleanCount}
                 blockedCount={blockedCount}
@@ -611,6 +660,76 @@ function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function SubmissionProofPanel({ config, daemonOnline, latestJob, receipt, scan, selectedPreset }) {
+  const steps = [
+    {
+      label: "Policy",
+      detail: config?.policyPatternIds?.length
+        ? `${selectedPreset} · ${config.policyPatternIds.length} patterns`
+        : selectedPreset,
+      status: config ? "done" : "waiting",
+      icon: KeyRound,
+    },
+    {
+      label: "Daemon",
+      detail: daemonOnline ? "HTTP + SSE connected" : "offline",
+      status: daemonOnline ? "done" : "blocked",
+      icon: Server,
+    },
+    {
+      label: "Scan",
+      detail: scan ? (scan.clean ? "clean prompt" : "sensitive data found") : "awaiting prompt",
+      status: scan ? (scan.clean ? "done" : "blocked") : "waiting",
+      icon: FileSearch,
+    },
+    {
+      label: "Proof job",
+      detail: latestJob ? latestJob.status : "not started",
+      status: latestJob?.status === "done" ? "done" : latestJob?.status === "blocked" ? "blocked" : latestJob ? "active" : "waiting",
+      icon: CloudCog,
+    },
+    {
+      label: "Receipt",
+      detail: receipt ? shortHash(receipt.storageRoot) : "local preview root pending",
+      status: receipt ? "done" : "waiting",
+      icon: Database,
+    },
+  ];
+
+  return (
+    <section className="surface submission-panel">
+      <div className="surface-head compact">
+        <div>
+          <p className="section-kicker">Submission proof</p>
+          <h2>Local compliance trail</h2>
+        </div>
+        <ClipboardCheck size={20} />
+      </div>
+      <div className="submission-status">
+        <span className={cx("status-dot", daemonOnline && "live")} />
+        <strong>{receipt ? "Receipt sealed" : scan?.clean ? "Ready to prove" : scan ? "Blocked" : "Ready"}</strong>
+        <code>{config?.storage?.dir ?? ".ghostprover"}</code>
+      </div>
+      <div className="workflow-list">
+        {steps.map((step) => {
+          const Icon = step.icon;
+          return (
+            <div className={cx("workflow-step", step.status)} key={step.label}>
+              <div className="workflow-icon">
+                <Icon size={15} />
+              </div>
+              <div>
+                <strong>{step.label}</strong>
+                <span>{step.detail}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

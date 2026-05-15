@@ -133,6 +133,66 @@
       "target_len": 32,
       "example": "sk_live_ABCDEFGHIJKLMNOPQRSTUVWx"
     },
+    "tech.google_api_key": {
+      "name": "Google API Key",
+      "description": "Google API key prefix (AIza + 28 alphanumeric)",
+      "industry": ["saas", "devops", "cloud"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+      "pattern_values": [65,73,122,97,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "AIzaSyDExampleGoogleApiKey1234"
+    },
+    "tech.slack_token": {
+      "name": "Slack Bot/User Token",
+      "description": "Slack token prefix (xoxb- + 27 alphanumeric)",
+      "industry": ["saas", "devops"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0,0,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+      "pattern_values": [120,111,120,98,45,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "xoxb-1234567890abcdefABCDEF1"
+    },
+    "tech.jwt": {
+      "name": "JSON Web Token Header",
+      "description": "JWT-like token beginning with eyJ",
+      "industry": ["saas", "ai", "devops"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7],
+      "pattern_values": [101,121,74,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6Ik"
+    },
+    "tech.bearer_token": {
+      "name": "Bearer Access Token",
+      "description": "Bearer token prefix followed by 25 alphanumeric characters",
+      "industry": ["saas", "ai", "devops"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0,0,0,0,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+      "pattern_values": [66,101,97,114,101,114,32,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "Bearer abc123def456ghi789jkl12"
+    },
+    "in.ifsc": {
+      "name": "Indian IFSC Code",
+      "description": "Indian bank IFSC code (4 uppercase + 0 + 6 alphanumeric)",
+      "industry": ["banking", "fintech", "india_kyc"],
+      "regulation": "RBI KYC",
+      "pattern_types": [3,3,3,3,0,5,5,5,5,5,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0,0,48,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 11,
+      "example": "HDFC0001234"
+    },
+    "tech.postgres_url": {
+      "name": "Postgres Connection URL",
+      "description": "Postgres connection string prefix",
+      "industry": ["saas", "devops", "cloud"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [112,111,115,116,103,114,101,115,58,47,47,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 11,
+      "example": "postgres://"
+    },
     "pii.phone_in": {
       "name": "Indian Phone Number",
       "description": "Indian mobile number with +91 prefix",
@@ -168,12 +228,12 @@
     "india_kyc": {
       "name": "India KYC (Know Your Customer)",
       "description": "Standard Indian identity document patterns",
-      "patterns": ["in.aadhar", "in.pan", "in.passport", "in.voter", "pii.phone_in"]
+      "patterns": ["in.aadhar", "in.pan", "in.passport", "in.voter", "pii.phone_in", "in.ifsc"]
     },
     "banking": {
       "name": "Banking & Finance",
       "description": "Financial institution compliance patterns",
-      "patterns": ["in.aadhar", "pii.ssn", "fin.cc16", "fin.routing", "pii.dob_iso"]
+      "patterns": ["in.aadhar", "pii.ssn", "fin.cc16", "fin.routing", "pii.dob_iso", "in.ifsc"]
     },
     "healthcare": {
       "name": "Healthcare (HIPAA)",
@@ -183,12 +243,12 @@
     "fintech": {
       "name": "Fintech / Payments",
       "description": "Payment processor compliance patterns",
-      "patterns": ["fin.cc16", "in.aadhar", "in.pan", "tech.stripe_key", "pii.ssn"]
+      "patterns": ["fin.cc16", "in.aadhar", "in.pan", "tech.stripe_key", "pii.ssn", "in.ifsc"]
     },
     "saas": {
       "name": "SaaS / DevOps",
       "description": "API key and credential leak prevention",
-      "patterns": ["tech.aws_key", "tech.github_pat", "tech.openai_key", "tech.stripe_key"]
+      "patterns": ["tech.aws_key", "tech.github_pat", "tech.openai_key", "tech.stripe_key", "tech.google_api_key", "tech.slack_token", "tech.jwt", "tech.bearer_token", "tech.postgres_url"]
     }
   }
 }

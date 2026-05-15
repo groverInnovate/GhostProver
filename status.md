@@ -131,6 +131,26 @@
 
 ---
 
+### 15 May 2026 (Phase 8 — Hackathon Product Readiness)
+1. **Judge Demo Mode Added**: `npm run demo:judge` now resets and seeds a local `.ghostprover/` audit trail with a clean receipt and a blocked prompt. Judges can open the console and immediately see receipt history without waiting for a full proof batch.
+2. **Daemon API Tests Added**: `npm run test:daemon` starts an isolated test daemon, verifies health/config/preset loading, confirms custom registry merging, checks blocked prompt detection, persists a blocked job, and verifies job/receipt API responses.
+3. **One-Proof Acceptance Test Added**: `npm run test:proof:single` runs a real background proof for one SaaS pattern, polls the daemon job endpoint, and verifies the local receipt includes proof size + storage root.
+4. **Registry Expanded**: Added enterprise patterns for Google API keys, Slack tokens, JWT-like values, Bearer tokens, Postgres connection URLs, and Indian IFSC codes. SaaS/banking/fintech/India KYC presets now feel closer to real company policy.
+5. **Custom Registry Examples Added**: `examples/custom-registry.json` and `.ghostprover.custom.example.json` show how a company can define internal customer IDs, deploy tokens, employee IDs, and an internal preset without editing source code.
+6. **Frontend Demo Flow Improved**: The React console now has a Submission Proof panel, clearer daemon error states, local storage visibility, workflow status steps, and better disabled states when the daemon is offline.
+7. **Documentation Added**: Added API docs, MCP setup guide, demo video script, known limitations, and README judge quickstart with Mermaid architecture diagram.
+
+**Summary — GhostProver is now packaged like a hackathon product instead of only a technical prototype: judges can run it quickly, see the agent workflow, inspect docs, verify daemon behavior, and run one real proof path.**
+
+**Issues:** Full multi-pattern proof batches are still slow on the WASM backend. Live 0G Storage + Chain anchoring is intentionally pending and should be wired through the existing local receipt adapter.
+
+**Tomorrow's Plan:**
+- Record the 3-minute demo using the new judge script and console flow.
+- Add live 0G Storage root + Chain tx hash into the daemon receipt adapter.
+- Replace the MCP manual tool-call flow with deeper editor/provider interception once the target agent environment is finalized.
+
+---
+
 # Component Status (15 May 2026)
 
 | Component | Status | Owner |
@@ -139,12 +159,15 @@
 | Character class matching | ✅ Complete — 9 classes, `matches_class()` in Noir | P1 |
 | Poseidon2 sponge hash (512, 32, 64) | ✅ Complete — TS ↔ Noir cross-validated | P1 |
 | Sliding window non-inclusion | ✅ Complete — dual mode, ~46k gates (pattern) | P1 |
-| Pattern Registry (15 patterns, 5 presets) | ✅ Complete — JSON + TS loader/validator | P1 |
+| Pattern Registry (21 patterns, 5 presets) | ✅ Complete — JSON + TS loader/validator + custom registry examples | P1 |
 | Batch Prover (parallel proofs) | ✅ Complete — concurrency control + pre-flight scan | P1 |
 | CLI Tool (scan/prove/init) | ✅ Complete — full command-line interface | P1 |
 | Express Middleware | ✅ Complete — auto-intercept + background proofs | P1 |
 | Background Compliance Daemon | ✅ Complete — scan/attest API, SSE, JSONL receipts | P1 |
 | MCP Server | ✅ Complete — agent tools call local daemon | P1 |
+| Judge Demo Mode | ✅ Complete — seeded local audit trail + quickstart | P1 |
+| Daemon API Tests | ✅ Complete — config, registry, scan, blocked job | P1 |
+| One-Proof Acceptance Test | ✅ Complete — real daemon proof path | P1 |
 | GhostProverRegistry.sol | ✅ Complete — 7 tests pass, batch proofs added | P1 |
 | Verifier.sol (Honk) | ✅ Generated — do not edit | auto |
 | Local Anvil demo | ✅ Working — batch proofs → deploy → receipt | P1 |
