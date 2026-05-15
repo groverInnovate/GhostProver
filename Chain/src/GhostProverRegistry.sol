@@ -31,6 +31,18 @@ contract GhostProverRegistry {
         uint256 timestamp
     );
 
+    /// @notice Emitted when a batch of ZK proofs is submitted and verified for a single prompt.
+    /// @dev    Saves gas by grouping all preset patterns into one event.
+    event ComplianceBatchReceiptIssued(
+        bytes32 indexed commitment,
+        bytes32[] targetHashes,
+        address indexed submitter,
+        address providerAddress,
+        string  modelId,
+        bytes32 storageRoot,
+        uint256 timestamp
+    );
+
     constructor(address verifierAddress) {
         require(verifierAddress != address(0), "verifier required");
         verifier = IVerifier(verifierAddress);
@@ -61,6 +73,43 @@ contract GhostProverRegistry {
         emit ComplianceReceiptIssued(
             commitment,
             targetHash,
+            msg.sender,
+            providerAddress,
+            modelId,
+            storageRoot,
+            block.timestamp
+        );
+    }
+
+    /// @notice Submit multiple ZK proofs of non-inclusion for a single prompt (preset batching).
+    /// @param proofs          Array of raw ZK proof bytes from Barretenberg.
+    /// @param commitment      Poseidon2 hash of the prompt (public input #1 for all proofs).
+    /// @param targetHashes    Array of Poseidon2 hashes of the target patterns (public input #2).
+    /// @param providerAddress 0G Compute TEE provider that executed the inference.
+    /// @param modelId         Model identifier.
+    /// @param storageRoot     0G Storage Merkle root.
+    function submitBatchReceipt(
+        bytes[] calldata proofs,
+        bytes32 commitment,
+        bytes32[] calldata targetHashes,
+        address providerAddress,
+        string  calldata modelId,
+        bytes32 storageRoot
+    ) external {
+        require(proofs.length == targetHashes.length, "proof/hash length mismatch");
+        require(proofs.length > 0, "empty batch");
+
+        bytes32[] memory publicInputs = new bytes32[](2);
+        publicInputs[0] = commitment;
+
+        for (uint256 i = 0; i < proofs.length; i++) {
+            publicInputs[1] = targetHashes[i];
+            require(verifier.verify(proofs[i], publicInputs), "invalid proof in batch");
+        }
+
+        emit ComplianceBatchReceiptIssued(
+            commitment,
+            targetHashes,
             msg.sender,
             providerAddress,
             modelId,

@@ -1,54 +1,65 @@
-# GhostProver
+# GhostProver v2 — Generic ZK Compliance Engine
 
-Privacy-preserving proof that a sensitive field (Aadhar number, API key, email) was **not** present in an AI inference prompt.
+An enterprise-grade, privacy-preserving compliance attestation layer for AI inference. 
+
+GhostProver v2 proves that sensitive data (like Aadhar numbers, PAN cards, AWS API keys, or Credit Card numbers) was **not** present in an AI prompt, without revealing the prompt or the sensitive data itself.
 
 ## How it works
 
-A ZK circuit proves three things simultaneously:
+A Zero-Knowledge (Noir) circuit proves:
+1. The prover knows a prompt that hashes to a public **commitment**.
+2. The prover checks the prompt against a generic **pattern** (e.g. `[DIGIT x 12]` for Aadhar).
+3. The pattern does **not** appear anywhere in the prompt.
+4. The pattern descriptor hashes to a public **pattern_hash**.
 
-1. The prover knows a prompt that hashes to a public **commitment**
-2. The prover knows a target field that hashes to a public **target_hash**
-3. The target field does **not** appear as a substring anywhere in the prompt
-
-The result is a cryptographic non-disclosure receipt — verifiable on-chain without revealing either the prompt or the sensitive data.
+The result is a cryptographically verifiable **Batch Compliance Receipt** issued on-chain, proving to auditors that an entire preset of sensitive data classes was blocked from the AI pipeline.
 
 ## Architecture
 
 ```
-User prompt (private)  ─┐
-                        ├─► Noir Circuit ─► ZK Proof ─► Verifier.sol ─► On-chain receipt
-Sensitive field (private) ┘
+User Prompt (private)  ─┐
+                        ├─► Noir Circuit ─► ZK Proofs ─► Verifier.sol ─► GhostProverRegistry (Batch Receipt)
+Pattern Types (private) ┘
 ```
 
+## Features
 
-## TypeScript SDK Wrapper
+- **Generic Pattern Matching**: 9 built-in character classes (`DIGIT`, `ALPHA`, `ALPHANUM`, `BASE64`, etc.) evaluated in-circuit.
+- **Industry Presets**: Built-in registries for `india_kyc`, `banking`, `fintech`, `healthcare`, and `saas`.
+- **Parallel Batch Prover**: Generates multiple non-inclusion proofs concurrently for a single prompt commitment.
+- **On-chain Batch Receipts**: Smart contract logic (`submitBatchReceipt`) groups all proofs into a single gas-efficient transaction.
+- **Express Middleware**: Drop-in `ghostProverMiddleware()` for automatic AI request interception and background attestation.
 
-GhostProver provides a full-featured TypeScript SDK to seamlessly integrate Zero-Knowledge proofs into your Node.js backend. The SDK handles input padding, aligns exactly with Noir's internal Poseidon2 hashing, and leverages `bb.js` for UltraHonk proof generation.
+## TypeScript SDK & CLI
 
-### SDK Usage
-```typescript
-import { generateProof, verifyProof } from "ghostprover";
+GhostProver provides a full-featured TypeScript SDK and CLI to seamlessly integrate Zero-Knowledge proofs into your Node.js backend.
 
-// Load your prompt and the sensitive target you want to prove isn't there
-const promptBytes = new TextEncoder().encode("Patient query: high blood pressure symptoms?");
-const targetBytes = new TextEncoder().encode("234567890123");
-
-// Generate ZK Proof & cryptographically sound commitments
-const { proof, publicInputs, commitment, targetHash } = await generateProof({
-  promptBytes,
-  targetBytes
-});
-
-// Verify the ZK Proof locally (or offload the proof to Verifier.sol on-chain)
-const isValid = await verifyProof(proof, publicInputs);
-console.log("Proof verifies successfully:", isValid);
-```
-
-### SDK Testing (End-to-End)
-To test the full lifecycle of padding, generating, and verifying a proof locally:
+### CLI Usage
+The easiest way to integrate GhostProver is via the CLI:
 ```bash
-npm install
-npx tsx src/test-proof.ts
+# Initialize a config file
+npx ghostprover init
+
+# Instantly scan a prompt against an industry preset (Zero-knowledge pre-flight)
+npx ghostprover scan --preset banking --prompt "Patient query: SSN is 123456789"
+
+# Generate parallel ZK Proofs for an entire preset
+npx ghostprover prove --preset saas --prompt "Clean prompt with no API keys"
+```
+
+### Express Middleware
+```typescript
+import express from 'express';
+import { ghostProverMiddleware } from 'ghostprover';
+
+const app = express();
+
+// Automatically intercepts AI prompts, runs a ZK pre-flight scan,
+// and orchestrates background proof generation if the prompt is clean.
+app.use('/v1/chat/completions', ghostProverMiddleware({
+  preset: 'india_kyc',
+  blocking: false // Return response immediately, prove in background
+}));
 ```
 
 
@@ -118,27 +129,25 @@ The missing integration step is the eventual binding between the proof
 commitment and a real TEE-attested request identity from 0G Compute.
 
 
-## Project structure
-
 ```text
 ├── src/
-│   ├── ghostprover.ts    # Main TypeScript SDK wrapper (`generateProof`, etc.)
+│   ├── ghostprover.ts    # Main SDK wrapper (`generatePatternProof`, etc.)
+│   ├── batch-prover.ts   # Parallel proof orchestration & pre-flight scans
+│   ├── cli.ts            # GhostProver terminal interface
+│   ├── middleware.ts     # Express.js drop-in integration
 │   ├── poseidon2.ts      # Pure TypeScript BN254 zero-knowledge hashing
-│   └── test-proof.ts     # E2E Testing suite for TS Wrapper
+│   └── registry/         # Industry presets and pattern definitions
 ├── Circuit/ghostprover/
-│   ├── src/main.nr       # ZK circuit (non-inclusion logic + Poseidon2 sponge)
-│   ├── Nargo.toml        # Noir project config
-│   ├── Prover.toml       # Example inputs for local execution
+│   ├── src/main.nr       # ZK circuit (Dual-mode non-inclusion + character classes)
 │   └── target/           # Auto-generated verification keys & Solidity Verifier
-└── package.json          # Node dependencies
-
-Chain/
-├── src/GhostProverRegistry.sol   # Demo-mode receipt registry
-├── script/DeployLocal.s.sol      # Local Anvil deployment script
-└── test/GhostProverRegistry.t.sol # Valid/tamper proof tests
-
-Compute/
-└── src/demo-receipt.ts           # Local proof-to-receipt demo driver
+├── Chain/
+│   ├── src/GhostProverRegistry.sol   # Batch receipt registry
+│   └── test/GhostProverRegistry.t.sol
+├── Frontend/
+│   └── index.html        # High-performance static UI dashboard
+└── Compute/
+    ├── src/mock-inference.ts         # TEE envelope simulation
+    └── src/orchestrator.ts           # Full inference + attestation pipeline
 ```
 
 ## License

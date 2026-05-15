@@ -100,6 +100,17 @@
 
 ---
 
+### 15 May 2026 (Phase 6 — Smart Contract Batch Processing)
+1. **Batch Submission Support**: Updated `GhostProverRegistry.sol` to include `submitBatchReceipt()` and a new `ComplianceBatchReceiptIssued` event. This allows multiple pattern-mode proofs (e.g. Aadhar, PAN, Voter ID) to be grouped and submitted under a single on-chain transaction.
+2. **Batch Tests**: Added `testBatchReceiptEmitsEvent` and `testBatchReceiptLengthMismatchRejected` to `GhostProverRegistry.t.sol`.
+3. **Frontend Integration**: Verified the `Frontend/` dashboard works flawlessly with real-time detection, history, and registry mapping.
+
+**Summary — Smart contracts are fully capable of handling GhostProver v2's preset-driven batch attestations, massively reducing gas costs.**
+
+**Next Steps**: Polish the `README.md` and prepare a final demonstration video/script.
+
+---
+
 # Component Status (15 May 2026)
 
 | Component | Status | Owner |
@@ -112,11 +123,11 @@
 | Batch Prover (parallel proofs) | ✅ Complete — concurrency control + pre-flight scan | P1 |
 | CLI Tool (scan/prove/init) | ✅ Complete — full command-line interface | P1 |
 | Express Middleware | ✅ Complete — auto-intercept + background proofs | P1 |
-| GhostProverRegistry.sol | ✅ Complete — 5 tests pass, 0G fields wired | P1 |
+| GhostProverRegistry.sol | ✅ Complete — 7 tests pass, batch proofs added | P1 |
 | Verifier.sol (Honk) | ✅ Generated — do not edit | auto |
-| Local Anvil demo | ✅ Working — proof → deploy → receipt | P1 |
+| Local Anvil demo | ✅ Working — batch proofs → deploy → receipt | P1 |
 | 0G Compute SDK wiring | ✅ Mock + live inference, TEE verify helper | P3 |
 | 0G Chain testnet deploy | ✅ Deploy0GTestnet.s.sol ready | P2 |
 | 0G Storage integration | ✅ storage.ts (upload + Merkle root) | P3 |
 | Orchestrator backend | ✅ orchestrator.ts wires full pipeline | P3 |
-| React frontend | 🔨 In Progress | P1 |
+| React frontend | ✅ Complete — self-contained static app | P1 |

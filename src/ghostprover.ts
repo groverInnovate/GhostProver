@@ -29,7 +29,7 @@
 // ---------------------------------------------------------------------------
 
 import { Noir } from "@noir-lang/noir_js";
-import { UltraHonkBackend, Barretenberg } from "@aztec/bb.js";
+import { UltraHonkBackend, Barretenberg, BackendType } from "@aztec/bb.js";
 import { poseidon2Hash512, poseidon2Hash32, computePatternHash } from "./poseidon2.js";
 
 // Load compiled circuit artifact
@@ -107,6 +107,43 @@ function hexToField(hex: string): string {
   return hex.startsWith("0x") ? hex : "0x" + hex;
 }
 
+async function createBarretenberg() {
+  return Barretenberg.new({
+    backend: BackendType.Wasm,
+    threads: 1,
+  });
+}
+
+let bbQueue: Promise<void> = Promise.resolve();
+
+async function withBarretenberg<T>(
+  fn: (api: Barretenberg) => Promise<T>
+): Promise<T> {
+  const previous = bbQueue;
+  let release!: () => void;
+  bbQueue = previous.then(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+  );
+
+  await previous;
+  let api: Barretenberg | undefined;
+  try {
+    api = await createBarretenberg();
+    return await fn(api);
+  } finally {
+    try {
+      if (api) {
+        await api.destroy();
+      }
+    } finally {
+      release();
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Core API
 // ---------------------------------------------------------------------------
@@ -156,17 +193,15 @@ export async function generateProof(
     target_hash: hexToField(targetHash),
   };
 
-  // Initialize Barretenberg, Noir, and backend
-  const api = await Barretenberg.new();
   const noir = new Noir(circuit as any);
-  const backend = new UltraHonkBackend(circuit.bytecode, api);
 
-  try {
-    // Generate witness
-    console.log("[GhostProver] Generating witness...");
-    const startTime = Date.now();
-    const { witness } = await noir.execute(circuitInputs);
+  // Generate witness
+  console.log("[GhostProver] Generating witness...");
+  const startTime = Date.now();
+  const { witness } = await noir.execute(circuitInputs);
 
+  return withBarretenberg(async (api) => {
+    const backend = new UltraHonkBackend(circuit.bytecode, api);
     // Generate proof. verifierTarget: 'evm' ensures the proof format matches
     // the Solidity verifier produced by `bb write_solidity_verifier -t evm`.
     console.log("[GhostProver] Generating proof...");
@@ -184,10 +219,7 @@ export async function generateProof(
       proofTimeMs,
       mode: 'exact' as const,
     };
-  } finally {
-    // Clean up Barretenberg resources
-    await api.destroy();
-  }
+  });
 }
 
 /**
@@ -201,10 +233,8 @@ export async function verifyProof(
   proof: Uint8Array,
   publicInputs: string[]
 ): Promise<boolean> {
-  const api = await Barretenberg.new();
-  const backend = new UltraHonkBackend(circuit.bytecode, api);
-
-  try {
+  return withBarretenberg(async (api) => {
+    const backend = new UltraHonkBackend(circuit.bytecode, api);
     console.log("[GhostProver] Verifying proof...");
     const isValid = await backend.verifyProof({
       proof,
@@ -212,9 +242,7 @@ export async function verifyProof(
     }, { verifierTarget: "evm" });
     console.log(`[GhostProver] Verification result: ${isValid}`);
     return isValid;
-  } finally {
-    await api.destroy();
-  }
+  });
 }
 
 /**
@@ -260,15 +288,14 @@ export async function generatePatternProof(
     target_hash: hexToField(patternHash),
   };
 
-  const api = await Barretenberg.new();
   const noir = new Noir(circuit as any);
-  const backend = new UltraHonkBackend(circuit.bytecode, api);
 
-  try {
-    console.log(`[GhostProver:${label}] Generating witness...`);
-    const startTime = Date.now();
-    const { witness } = await noir.execute(circuitInputs);
+  console.log(`[GhostProver:${label}] Generating witness...`);
+  const startTime = Date.now();
+  const { witness } = await noir.execute(circuitInputs);
 
+  return withBarretenberg(async (api) => {
+    const backend = new UltraHonkBackend(circuit.bytecode, api);
     console.log(`[GhostProver:${label}] Generating proof...`);
     const proof = await backend.generateProof(witness, { verifierTarget: "evm" });
     const proofTimeMs = Date.now() - startTime;
@@ -285,9 +312,7 @@ export async function generatePatternProof(
       mode: 'pattern',
       patternId,
     };
-  } finally {
-    await api.destroy();
-  }
+  });
 }
 
 /**
