@@ -99,6 +99,25 @@ The product combines all three 0G layers into a single product flow:
 
 Together they turn a one-time prompt-compliance check into a reusable compliance record that any regulator, auditor, or counterparty can verify without ever seeing the original prompt.
 
+### Why the final receipt cannot be faked
+
+Local draft proofs are useful for fast scans, but the final GhostProver
+compliance artifact is the live 0G receipt. In that path, GhostProver first
+captures a 0G inference sample and verifies the provider/response metadata.
+The ZK proof input is then derived from the saved inference request body, not
+from a separate user-supplied prompt string. If the top-level prompt is edited
+to differ from the attested request body, orchestration fails before storage or
+chain submission.
+
+That means a user cannot generate a proof for a clean prompt and then attach it
+to a different risky inference request. The on-chain receipt binds:
+
+- the prompt commitment generated from the verified inference request body
+- the sensitive-data pattern hashes checked by the ZK proof
+- the 0G Compute provider and model
+- the 0G Storage root for the audit bundle
+- the 0G Chain transaction emitted by `GhostProverRegistry`
+
 ## Deployed Contracts — 0G Mainnet
 
 | Contract | Address |
@@ -352,10 +371,21 @@ cp examples/.ghostprover.mainnet.example.json .ghostprover.json
 npm run daemon
 
 # In a new terminal
+cd Compute && npm run server
+
+# In a third terminal
 cd Frontend && npm run dev
 ```
 
-With `onChainSubmit: true` in `.ghostprover.json`, every clean attestation that passes the daemon's `/v1/attest` endpoint will be routed through the Compute orchestrator and settled on 0G Chain. The receipt — including `txHash`, provider, model, and 0G Storage root — is appended to `.ghostprover/receipts.jsonl`.
+The daemon runs the local policy/MCP API on `8787`; the Compute server streams
+the live 0G receipt pipeline on `8790`. In the frontend, use **Run scan** first,
+then **Run live 0G receipt** to execute:
+
+```text
+scan → 0G inference → TEE/response verification → ZK proof → 0G Storage → 0G Chain → verify receipt
+```
+
+With `onChainSubmit: true` in `.ghostprover.json`, every clean attestation that passes the daemon's `/v1/attest` endpoint can also be routed through the Compute orchestrator and settled on 0G Chain. The receipt — including `txHash`, provider, model, and 0G Storage root — is appended to `.ghostprover/receipts.jsonl`.
 
 ## Repository Layout
 

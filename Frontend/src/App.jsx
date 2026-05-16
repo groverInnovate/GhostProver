@@ -30,6 +30,7 @@ import { CLASS_LABELS, REGISTRY } from "./registry.js";
 import { bytesOf } from "./scanner.js";
 
 const API_BASE = import.meta.env.VITE_GHOSTPROVER_API ?? "http://127.0.0.1:8787";
+const COMPUTE_API_BASE = import.meta.env.VITE_GHOSTPROVER_COMPUTE_API ?? "http://127.0.0.1:8790";
 
 const SAMPLE_PROMPTS = {
   clean:
@@ -50,6 +51,7 @@ function cx(...parts) {
 
 function shortHash(value) {
   if (!value) return "pending";
+  if (value === "pending" || String(value).length <= 20) return value;
   return `${value.slice(0, 10)}...${value.slice(-8)}`;
 }
 
@@ -78,6 +80,34 @@ function loadHistory() {
     return JSON.parse(localStorage.getItem("ghostprover-history") || "[]");
   } catch {
     return [];
+  }
+}
+
+function initialLiveRun() {
+  return {
+    running: false,
+    progress: 0,
+    stage: "idle",
+    logs: [],
+    result: null,
+    sample: null,
+    verification: null,
+    error: "",
+  };
+}
+
+function parseSseBlock(block) {
+  let event = "message";
+  const data = [];
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) event = line.slice(6).trim();
+    if (line.startsWith("data:")) data.push(line.slice(5).trim());
+  }
+  if (!data.length) return null;
+  try {
+    return { event, data: JSON.parse(data.join("\n")) };
+  } catch {
+    return { event, data: data.join("\n") };
   }
 }
 
@@ -138,6 +168,7 @@ function App() {
   const [history, setHistory] = useState(loadHistory);
   const [registryFilter, setRegistryFilter] = useState("all");
   const [registrySearch, setRegistrySearch] = useState("");
+  const [liveRun, setLiveRun] = useState(initialLiveRun);
 
   const preset = presetView(selectedPreset, registry.presets[selectedPreset] ?? REGISTRY.presets.saas);
   const promptBytes = bytesOf(prompt).length;
@@ -342,6 +373,139 @@ function App() {
     }
   }
 
+  async function runLiveReceipt() {
+    if (!scan || !scan.clean) return;
+    if (promptTooLarge) {
+      setApiError(`Prompt is ${promptBytes} bytes; GhostProver accepts ${maxPromptBytes} bytes.`);
+      return;
+    }
+
+    const demoPattern = scan.results.find((item) => item.id === "tech.aws_key")?.id ?? scan.results[0]?.id;
+    if (!demoPattern) {
+      setApiError("No policy pattern is available for the live receipt run.");
+      return;
+    }
+
+    setApiError("");
+    setLiveRun({ ...initialLiveRun(), running: true, stage: "queued", logs: [] });
+
+    let response;
+    try {
+      response = await fetch(`${COMPUTE_API_BASE}/api/live-receipt/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, patterns: [demoPattern] }),
+      });
+    } catch {
+      setLiveRun((current) => ({
+        ...current,
+        running: false,
+        error: `Compute server is offline. Start it with: cd Compute && npm run server`,
+      }));
+      return;
+    }
+
+    if (!response.ok || !response.body) {
+      const message = await apiErrorMessage(response, "Live 0G receipt failed to start.");
+      setLiveRun((current) => ({
+        ...current,
+        running: false,
+        error: message,
+      }));
+      return;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalResult = null;
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() ?? "";
+        for (const block of blocks) {
+          const parsed = parseSseBlock(block.trim());
+          if (!parsed) continue;
+          if (parsed.event === "progress") {
+            setLiveRun((current) => ({
+              ...current,
+              stage: parsed.data.stage,
+              progress: parsed.data.progress,
+              logs: [{ level: "info", msg: parsed.data.msg }, ...current.logs].slice(0, 12),
+            }));
+          } else if (parsed.event === "sample") {
+            setLiveRun((current) => ({ ...current, sample: parsed.data }));
+          } else if (parsed.event === "log") {
+            setLiveRun((current) => ({
+              ...current,
+              logs: [{ level: parsed.data.level, msg: parsed.data.msg }, ...current.logs].slice(0, 12),
+            }));
+          } else if (parsed.event === "result") {
+            finalResult = parsed.data;
+            const nextReceipt = {
+              id: parsed.data.txHash,
+              jobId: parsed.data.samplePath,
+              preset: selectedPreset,
+              patternIds: [demoPattern],
+              commitment: parsed.data.commitment,
+              targetHashes: parsed.data.targetHashes ?? [],
+              proofStatuses: [
+                {
+                  patternId: demoPattern,
+                  patternName: registry.patterns[demoPattern]?.name ?? demoPattern,
+                  status: "done",
+                  proofSize: 10560,
+                  proofTimeMs: parsed.data.proofTimeMs,
+                },
+              ],
+              storageRoot: parsed.data.storageRoot,
+              status: parsed.data.txHash ? "on_chain" : "on_chain_failed",
+              txHash: parsed.data.txHash,
+              providerAddress: parsed.data.provider,
+              modelId: parsed.data.model,
+              createdAt: new Date().toISOString(),
+            };
+            setReceipt(nextReceipt);
+            setCommitment(parsed.data.commitment);
+            setActiveTab("console");
+            setLiveRun((current) => ({
+              ...current,
+              result: parsed.data,
+              progress: 100,
+              stage: "complete",
+            }));
+          } else if (parsed.event === "error") {
+            setLiveRun((current) => ({
+              ...current,
+              running: false,
+              error: parsed.data.error ?? "Live 0G receipt failed.",
+            }));
+          }
+        }
+      }
+    } finally {
+      setLiveRun((current) => ({ ...current, running: false, result: finalResult ?? current.result }));
+    }
+  }
+
+  async function verifyLiveReceipt() {
+    const txHash = liveRun.result?.txHash ?? receipt?.txHash;
+    if (!txHash) return;
+    setLiveRun((current) => ({ ...current, verification: "checking" }));
+    try {
+      const response = await fetch(`${COMPUTE_API_BASE}/api/receipt/${txHash}`);
+      if (!response.ok) throw new Error(await apiErrorMessage(response, "Receipt verification failed."));
+      const payload = await response.json();
+      setLiveRun((current) => ({ ...current, verification: payload }));
+    } catch (err) {
+      setLiveRun((current) => ({ ...current, verification: { error: err.message } }));
+    }
+  }
+
   function resetRun() {
     setScan(null);
     setProofRun([]);
@@ -421,7 +585,17 @@ function App() {
               type="button"
             >
               <Play size={17} />
-              Generate proofs
+              Generate ZK proof
+            </button>
+            <button
+              className="primary-action live"
+              onClick={runLiveReceipt}
+              disabled={!scan?.clean || liveRun.running || promptTooLarge}
+              type="button"
+              title="Run live 0G inference, bind proof to the attested request, upload to 0G Storage, and submit on-chain"
+            >
+              {liveRun.running ? <Loader2 size={17} className="spin" /> : <BadgeCheck size={17} />}
+              Run live 0G receipt
             </button>
           </div>
         </header>
@@ -578,6 +752,12 @@ function App() {
                 receipt={receipt}
                 scan={scan}
                 selectedPreset={selectedPreset}
+              />
+
+              <LiveReceiptPanel
+                liveRun={liveRun}
+                computeApiBase={COMPUTE_API_BASE}
+                onVerify={verifyLiveReceipt}
               />
 
               <RuntimePanel config={config} status={status} jobs={jobs} />
@@ -840,6 +1020,120 @@ function SubmissionProofPanel({ config, daemonOnline, latestJob, receipt, scan, 
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function LiveReceiptPanel({ liveRun, computeApiBase, onVerify }) {
+  const result = liveRun.result;
+  const sample = liveRun.sample;
+  const verificationError =
+    liveRun.verification && typeof liveRun.verification === "object" && liveRun.verification.error;
+  const verifiedEvents =
+    liveRun.verification && typeof liveRun.verification === "object" && liveRun.verification.events;
+
+  const steps = [
+    ["Inference", sample ? "done" : liveRun.progress >= 8 ? "active" : "waiting"],
+    ["TEE", result?.attestationValid || sample?.teeVerified ? "done" : liveRun.progress >= 36 ? "active" : "waiting"],
+    ["Proof", liveRun.progress >= 75 ? "done" : liveRun.progress >= 48 ? "active" : "waiting"],
+    ["Storage", result?.storageRoot ? "done" : liveRun.progress >= 86 ? "active" : "waiting"],
+    ["Chain", result?.txHash ? "done" : liveRun.progress >= 96 ? "active" : "waiting"],
+  ];
+
+  return (
+    <section className="surface live-receipt-panel">
+      <div className="surface-head compact">
+        <div>
+          <p className="section-kicker">Live 0G receipt</p>
+          <h2>{result?.txHash ? "On-chain artifact" : liveRun.running ? "Pipeline running" : "Ready"}</h2>
+        </div>
+        {liveRun.running ? <Loader2 size={20} className="spin" /> : <BadgeCheck size={20} />}
+      </div>
+
+      <div className="live-progress">
+        <div className="progress-track">
+          <span style={{ width: `${liveRun.progress}%` }} />
+        </div>
+        <div className="progress-meta">
+          <strong>{liveRun.progress}%</strong>
+          <span>{liveRun.stage}</span>
+        </div>
+      </div>
+
+      <div className="live-step-grid">
+        {steps.map(([label, status]) => (
+          <div className={cx("live-step", status)} key={label}>
+            {status === "done" ? <Check size={14} /> : status === "active" ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {sample?.response && (
+        <div className="model-response">
+          <span>Model response</span>
+          <p>{sample.response}</p>
+        </div>
+      )}
+
+      <div className="receipt-fields compact-fields">
+        <div className="receipt-field">
+          <span>Compute API</span>
+          <code>{computeApiBase}</code>
+        </div>
+        <div className="receipt-field">
+          <span>TEE verified</span>
+          <code>{String(result?.attestationValid ?? sample?.teeVerified ?? "pending")}</code>
+        </div>
+        <div className="receipt-field">
+          <span>Provider</span>
+          <code>{shortHash(result?.provider ?? sample?.provider)}</code>
+        </div>
+        <div className="receipt-field">
+          <span>Model</span>
+          <code>{result?.model ?? sample?.model ?? "pending"}</code>
+        </div>
+        <div className="receipt-field">
+          <span>Storage root</span>
+          <code>{shortHash(result?.storageRoot)}</code>
+        </div>
+        <div className="receipt-field">
+          <span>Chain tx</span>
+          <code>{shortHash(result?.txHash)}</code>
+        </div>
+      </div>
+
+      {result?.txHash && (
+        <button className="verify-button" type="button" onClick={onVerify}>
+          <ShieldCheck size={16} />
+          Verify on-chain receipt
+        </button>
+      )}
+
+      {liveRun.verification === "checking" && (
+        <div className="receipt-state">
+          <Loader2 size={15} className="spin" />
+          Checking registry event
+        </div>
+      )}
+      {verifiedEvents && (
+        <div className="receipt-state">
+          <Hash size={15} />
+          Verified {verifiedEvents.length} registry event(s)
+        </div>
+      )}
+      {verificationError && (
+        <div className="receipt-state failed">
+          <AlertTriangle size={15} />
+          {verificationError}
+        </div>
+      )}
+      {liveRun.error && (
+        <div className="receipt-state failed">
+          <AlertTriangle size={15} />
+          {liveRun.error}
+        </div>
+      )}
     </section>
   );
 }

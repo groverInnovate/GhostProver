@@ -7,6 +7,7 @@
  *   GET  /api/health             — server + config status
  *   GET  /api/samples            — list available inference logs
  *   POST /api/inference/mock     — generate a fresh mock inference log
+ *   POST /api/live-receipt/stream — run live inference + proof + storage + chain with SSE
  *   POST /api/prove              — run full pipeline (proof + storage + on-chain)
  *   POST /api/prove/stream       — same as /api/prove but with SSE progress
  *   GET  /api/receipt/:txHash    — fetch on-chain receipt details
@@ -15,7 +16,7 @@
  *   npm run server
  *
  * Environment:
- *   PORT                — default 8787
+ *   PORT                — default 8790
  *   REGISTRY_ADDRESS    — GhostProverRegistry contract address
  *   ZG_RPC_URL          — 0G Chain RPC (or local Anvil http://127.0.0.1:8545)
  *   PRIVATE_KEY         — wallet for on-chain tx
@@ -30,7 +31,7 @@ import { spawn } from 'node:child_process';
 import { ethers } from 'ethers';
 import { orchestrate } from './orchestrator.js';
 
-const PORT = Number(process.env.PORT ?? 8787);
+const PORT = Number(process.env.PORT ?? 8790);
 const SAMPLES_DIR = path.resolve(process.cwd(), 'samples');
 const DEFAULT_INDEXER =
   process.env.ZG_INDEXER_URL ??
@@ -64,6 +65,24 @@ function newJobId(): string {
 function appendLog(job: Job, level: Job['logs'][number]['level'], msg: string) {
   job.logs.push({ ts: Date.now(), level, msg });
   if (job.logs.length > 200) job.logs.shift();
+}
+
+function extractSavedSamplePath(output: string): string | null {
+  const match = output.match(/\[saved\]\s+(.+\.log\.json)/);
+  return match?.[1]?.trim() ?? null;
+}
+
+function extractAssistantResponse(log: Record<string, unknown>): string {
+  const body = (log.response as { body?: unknown } | undefined)?.body;
+  if (body && typeof body === 'object') {
+    const choices = (body as { choices?: unknown[] }).choices;
+    const first = Array.isArray(choices) ? choices[0] : undefined;
+    if (first && typeof first === 'object') {
+      const message = (first as { message?: { content?: unknown } }).message;
+      if (typeof message?.content === 'string') return message.content;
+    }
+  }
+  return typeof body === 'string' ? body : '';
 }
 
 // -----------------------------------------------------------------------------
@@ -254,6 +273,156 @@ app.post('/api/prove/stream', async (req, res) => {
   } finally {
     console.log = origLog;
     console.warn = origWarn;
+    send('end', { jobId });
+    res.end();
+  }
+});
+
+// -----------------------------------------------------------------------------
+// POST /api/live-receipt/stream — live 0G inference, attested proof, storage, chain
+// -----------------------------------------------------------------------------
+app.post('/api/live-receipt/stream', async (req, res) => {
+  const { prompt, patterns, preset, skipStorage, skipOnChain, allowUnverified } = req.body ?? {};
+  if (!prompt || typeof prompt !== 'string') {
+    res.status(400).json({ error: 'prompt is required' });
+    return;
+  }
+  if (!preset && !Array.isArray(patterns)) {
+    res.status(400).json({ error: 'preset or patterns is required' });
+    return;
+  }
+
+  const jobId = newJobId();
+  const job: Job = {
+    id: jobId,
+    status: 'queued',
+    stage: 'init',
+    progress: 0,
+    startedAt: Date.now(),
+    logs: [],
+  };
+  jobs.set(jobId, job);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const send = (event: string, data: unknown) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+  const progress = (stage: string, pct: number, msg: string) => {
+    job.stage = stage;
+    job.progress = pct;
+    appendLog(job, 'info', msg);
+    send('progress', { stage, progress: pct, msg });
+  };
+  const log = (level: Job['logs'][number]['level'], msg: string) => {
+    appendLog(job, level, msg);
+    send('log', { level, msg });
+  };
+
+  job.status = 'running';
+  progress('inference', 8, 'starting live 0G inference');
+
+  try {
+    const inferenceProc = spawn('npm', ['run', 'inference', '--', prompt], {
+      cwd: process.cwd(),
+      env: { ...process.env } as Record<string, string>,
+    });
+    let inferenceOutput = '';
+    inferenceProc.stdout.on('data', (chunk) => {
+      const msg = chunk.toString();
+      inferenceOutput += msg;
+      if (msg.includes('[verifyService]')) progress('tee-provider', 18, 'provider TEE service verification running');
+      if (msg.includes('=== RAW RESPONSE ===')) progress('inference-response', 28, '0G inference response received');
+      if (msg.includes('TEE signature valid = true')) progress('tee-response', 36, '0G response verification succeeded');
+      if (msg.includes('[saved]')) progress('sample', 42, 'attested inference sample saved');
+      log('info', msg);
+    });
+    inferenceProc.stderr.on('data', (chunk) => {
+      const msg = chunk.toString();
+      inferenceOutput += msg;
+      log('warn', msg);
+    });
+
+    const inferenceCode = await new Promise<number | null>((resolve) => {
+      inferenceProc.on('close', resolve);
+    });
+    if (inferenceCode !== 0) {
+      throw new Error(`0G inference failed with exit code ${inferenceCode}`);
+    }
+
+    const samplePath = extractSavedSamplePath(inferenceOutput);
+    if (!samplePath) {
+      throw new Error('0G inference completed but did not print a saved sample path');
+    }
+    const inferenceLog = JSON.parse(fs.readFileSync(samplePath, 'utf8')) as Record<string, unknown>;
+    send('sample', {
+      samplePath,
+      provider: inferenceLog.provider ?? null,
+      model: inferenceLog.model ?? null,
+      teeVerified: inferenceLog.teeVerified ?? null,
+      response: extractAssistantResponse(inferenceLog),
+    });
+
+    progress('proof', 48, 'generating ZK proof from attested request body');
+
+    const origLog = console.log;
+    const origWarn = console.warn;
+    const stageMap: Record<string, { stage: string; progress: number }> = {
+      'loaded inference log': { stage: 'sample-bound', progress: 50 },
+      'SDK TEE verification from sample: true': { stage: 'tee-bound', progress: 56 },
+      'generating batch ZK proofs': { stage: 'proof', progress: 62 },
+      'Proof generated': { stage: 'proof-done', progress: 75 },
+      'upload success': { stage: 'storage', progress: 86 },
+      'storage root': { stage: 'storage', progress: 88 },
+      'batch receipt submitted': { stage: 'chain', progress: 96 },
+      'receipt submitted': { stage: 'chain', progress: 96 },
+    };
+    const intercept = (level: Job['logs'][number]['level']) => (...args: unknown[]) => {
+      const msg = args.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join(' ');
+      appendLog(job, level, msg);
+      for (const [key, val] of Object.entries(stageMap)) {
+        if (msg.includes(key)) {
+          send('progress', { stage: val.stage, progress: val.progress, msg });
+          break;
+        }
+      }
+      send('log', { level, msg });
+      (level === 'warn' ? origWarn : origLog)(...args);
+    };
+    console.log = intercept('info');
+    console.warn = intercept('warn');
+
+    try {
+      const result = await orchestrate({
+        samplePath,
+        preset,
+        patternIds: Array.isArray(patterns) ? patterns : undefined,
+        skipStorage: Boolean(skipStorage),
+        skipOnChain: Boolean(skipOnChain),
+        allowUnverified: Boolean(allowUnverified),
+      });
+      job.status = 'done';
+      job.stage = 'complete';
+      job.progress = 100;
+      job.result = result;
+      job.finishedAt = Date.now();
+      send('progress', { stage: 'complete', progress: 100, msg: 'live 0G receipt complete' });
+      send('result', { ...result, samplePath, response: extractAssistantResponse(inferenceLog) });
+    } finally {
+      console.log = origLog;
+      console.warn = origWarn;
+    }
+  } catch (err) {
+    const message = (err as Error).message ?? String(err);
+    job.status = 'error';
+    job.error = message;
+    job.finishedAt = Date.now();
+    send('error', { error: message });
+  } finally {
     send('end', { jobId });
     res.end();
   }
