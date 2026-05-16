@@ -128,6 +128,36 @@ function findLatestSample(): string | null {
   return candidates[0]?.full ?? null;
 }
 
+function extractPromptFromInferenceRequest(requestBody: unknown): string | null {
+  if (!requestBody || typeof requestBody !== 'object') return null;
+  const body = requestBody as { messages?: unknown[]; prompt?: unknown; input?: unknown };
+
+  if (typeof body.prompt === 'string') return body.prompt;
+  if (typeof body.input === 'string') return body.input;
+  if (!Array.isArray(body.messages)) return null;
+
+  const parts = body.messages.map((message) => {
+    if (!message || typeof message !== 'object') return '';
+    const content = (message as { content?: unknown }).content;
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      return content
+        .map((part) => {
+          if (typeof part === 'string') return part;
+          if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
+            return (part as { text: string }).text;
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+    return '';
+  }).filter(Boolean);
+
+  return parts.length ? parts.join('\n') : null;
+}
+
 // ---------------------------------------------------------------------------
 // Pipeline steps
 // ---------------------------------------------------------------------------
@@ -336,7 +366,21 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
       throw new Error('No prompt provided and no inference log found. Run inference:mock first.');
     }
     inferenceLog = JSON.parse(fs.readFileSync(samplePath, 'utf8'));
-    prompt = inferenceLog.prompt as string;
+    const requestPrompt = extractPromptFromInferenceRequest(
+      (inferenceLog.request as { body?: unknown } | undefined)?.body
+    );
+    const loggedPrompt = typeof inferenceLog.prompt === 'string' ? inferenceLog.prompt : null;
+    if (requestPrompt) {
+      if (loggedPrompt && loggedPrompt !== requestPrompt) {
+        throw new Error(
+          'Inference log prompt mismatch: top-level prompt does not match the attested request body.'
+        );
+      }
+      prompt = requestPrompt;
+    } else if (loggedPrompt) {
+      prompt = loggedPrompt;
+      console.warn('[orchestrator] no request.body prompt found; falling back to top-level prompt');
+    }
     provider = (inferenceLog.provider as string) ?? '';
     model = (inferenceLog.model as string) ?? '';
     zerogAuth = (inferenceLog.zerogAuth as { parsed?: ZerogAuthEnvelope })?.parsed ?? null;
@@ -365,7 +409,15 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   if (zerogAuth) {
     const result = verifyInferenceLog(inferenceLog as Parameters<typeof verifyInferenceLog>[0]);
     console.log(`[orchestrator] zerogAuth diagnostic verification: ${result?.valid ?? null}`);
-    if (!attestationValid && result?.error) {
+    if (result?.valid === false) {
+      attestationValid = false;
+    } else if (result?.valid === true && attestationValid !== false) {
+      attestationValid = true;
+    }
+    if (result?.valid === false && !allowUnverified) {
+      throw new Error(`TEE attestation request/response hash verification failed: ${result.error}`);
+    }
+    if (attestationValid !== true && result?.error) {
       console.warn(`[orchestrator] attestation error: ${result.error}`);
     }
   }

@@ -12,6 +12,7 @@ export interface ZerogReceiptResult {
   model: string;
   attestationValid: boolean | null;
   targetHashes?: string[];
+  samplePath?: string;
 }
 
 /**
@@ -34,16 +35,6 @@ export async function submitReceiptTo0G(input: {
   }
 
   const computeDir = path.resolve(input.cwd, "Compute");
-  const args = [
-    "run",
-    "orchestrate",
-    "--",
-    "--prompt",
-    input.prompt,
-    "--patterns",
-    input.patternIds.join(","),
-  ];
-
   const env = {
     ...process.env,
     REGISTRY_ADDRESS: process.env.REGISTRY_ADDRESS || input.config.registryAddress,
@@ -55,6 +46,30 @@ export async function submitReceiptTo0G(input: {
         : "custom"),
     GHOSTPROVER_PROOF_CONCURRENCY: String(input.config.concurrency),
   };
+
+  const inference = await execFileAsync("npm", ["run", "inference", "--", input.prompt], {
+    cwd: computeDir,
+    env,
+    maxBuffer: 1024 * 1024 * 20,
+  });
+  const samplePath = parseSavedSamplePath(inference.stdout);
+  if (!samplePath) {
+    throw new Error(
+      `0G inference completed but did not print a saved sample path.\n${
+        inference.stderr || inference.stdout
+      }`
+    );
+  }
+
+  const args = [
+    "run",
+    "orchestrate",
+    "--",
+    "--sample",
+    samplePath,
+    "--patterns",
+    input.patternIds.join(","),
+  ];
 
   const { stdout, stderr } = await execFileAsync("npm", args, {
     cwd: computeDir,
@@ -68,7 +83,12 @@ export async function submitReceiptTo0G(input: {
       `0G orchestrator completed but did not print a parseable result.\n${stderr || stdout}`
     );
   }
-  return parsed;
+  return { ...parsed, samplePath };
+}
+
+function parseSavedSamplePath(stdout: string): string | null {
+  const match = stdout.match(/\[saved\]\s+(.+\.log\.json)/);
+  return match?.[1]?.trim() ?? null;
 }
 
 function parseOrchestratorResult(stdout: string): ZerogReceiptResult | null {
