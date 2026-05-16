@@ -12,6 +12,7 @@ import {
   type EffectiveGhostProverConfig,
 } from "./config.js";
 import { LocalStore, type StoredJob, type StoredReceipt } from "./local-store.js";
+import { submitReceiptTo0G } from "./zerog-adapter.js";
 import type { PatternRegistry } from "../registry/index.js";
 
 interface DaemonOptions {
@@ -65,6 +66,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<http.Ser
   store.ensure();
 
   const state = {
+    cwd,
     config: {
       ...config,
       daemon: {
@@ -109,6 +111,7 @@ async function route(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   state: {
+    cwd: string;
     config: EffectiveGhostProverConfig;
     registry: PatternRegistry;
     store: LocalStore;
@@ -312,6 +315,7 @@ async function runProofJob(
   job: StoredJob,
   prompt: string,
   state: {
+    cwd: string;
     config: EffectiveGhostProverConfig;
     registry: PatternRegistry;
     store: LocalStore;
@@ -343,7 +347,49 @@ async function runProofJob(
       },
     });
 
-    const receipt = createReceipt(current, result.results);
+    let receipt = createReceipt(current, result.results);
+    if (state.config.onChainSubmit) {
+      current = {
+        ...current,
+        progress: [
+          ...current.progress,
+          {
+            patternId: "0g",
+            status: "submitting",
+            detail: "Submitting audit bundle and batch receipt through the Compute 0G adapter",
+            at: new Date().toISOString(),
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+      state.store.appendJob(current);
+      broadcast(state.clients, "job", current);
+
+      try {
+        const onChain = await submitReceiptTo0G({
+          cwd: state.cwd,
+          prompt,
+          patternIds: current.patternIds,
+          config: state.config,
+        });
+        receipt = {
+          ...receipt,
+          status: onChain.txHash ? "on_chain" : "on_chain_failed",
+          txHash: onChain.txHash ?? undefined,
+          storageRoot: onChain.storageRoot ?? receipt.storageRoot,
+          targetHashes: onChain.targetHashes?.length ? onChain.targetHashes : receipt.targetHashes,
+          providerAddress: onChain.provider || undefined,
+          modelId: onChain.model || undefined,
+          onChainError: onChain.txHash ? undefined : "0G orchestrator did not return a txHash",
+        };
+      } catch (err) {
+        receipt = {
+          ...receipt,
+          status: "on_chain_failed",
+          onChainError: (err as Error).message,
+        };
+      }
+    }
     current = updateJob(current, { status: "done", receiptId: receipt.id });
     state.store.appendReceipt(receipt);
     state.store.appendJob(current);
@@ -368,9 +414,10 @@ function updateJob(job: StoredJob, patch: Partial<StoredJob>): StoredJob {
 }
 
 /**
- * Local receipt shape mirrors the future 0G bundle: commitment, target hashes,
- * proof statuses, and a storage root. For now the root is a SHA-256 digest of
- * the local audit bundle; live 0G Storage can replace this adapter later.
+ * Draft receipt shape used as the daemon's durable queue/cache before the
+ * final 0G receipt is anchored. In offline mode the storage root is a SHA-256
+ * digest of this audit bundle; with onChainSubmit enabled, the Compute adapter
+ * replaces it with the live 0G Storage root and on-chain transaction metadata.
  */
 function createReceipt(
   job: StoredJob,
@@ -413,7 +460,7 @@ function createReceipt(
     targetHashes,
     proofStatuses,
     storageRoot: sha256Hex(JSON.stringify(auditBundle)),
-    status: "local",
+    status: "draft",
     createdAt,
   };
 }

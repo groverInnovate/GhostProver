@@ -1,0 +1,18 @@
+{
+  "preset": "saas",
+  "patterns": [],
+  "customRegistryPath": "",
+  "blockOnDetection": true,
+  "proofMode": "background",
+  "concurrency": 1,
+  "daemon": {
+    "host": "127.0.0.1",
+    "port": 8787
+  },
+  "storage": {
+    "dir": ".ghostprover"
+  },
+  "onChainSubmit": true,
+  "registryAddress": "0x9595BD4e6b868C64001904EeF76d838D78604B6e",
+  "rpcUrl": "https://evmrpc.0g.ai"
+}

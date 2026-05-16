@@ -107,7 +107,7 @@ server.registerTool(
 server.registerTool(
   "ghostprover_list_receipts",
   {
-    description: "List locally stored GhostProver receipts.",
+    description: "List GhostProver receipt records from the daemon cache.",
     inputSchema: {
       limit: z.number().int().positive().max(50).optional(),
     },
@@ -115,7 +115,7 @@ server.registerTool(
   async ({ limit }) => {
     const result: any = await daemonGet("/v1/receipts");
     const receipts = result.receipts.slice(0, limit ?? 10);
-    return toolResult({ receipts }, `${receipts.length} local receipt(s).`);
+    return toolResult({ receipts }, `${receipts.length} receipt record(s).`);
   }
 );
 

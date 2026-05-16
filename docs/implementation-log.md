@@ -123,26 +123,26 @@ For the current product overview, use [README.md](../README.md). For a concise h
 1. **Local Daemon Added**: Built `ghostprover daemon`, a localhost compliance service that exposes `/v1/scan`, `/v1/attest`, `/v1/jobs/:id`, `/v1/receipts`, `/v1/presets`, `/v1/config`, and `/v1/events`. The daemon is now the source of truth for local agent integrations and the frontend.
 2. **Policy Config Layer**: Expanded `.ghostprover.json` support with `preset`, explicit `patterns`, `customRegistryPath`, `blockOnDetection`, `proofMode`, `concurrency`, daemon host/port, and local storage directory. Built-in registries can now be merged with company-specific custom registries and validated using the existing pattern schema.
 3. **Background Proof Queue**: Clean prompts create durable jobs, run batch proofs in the background, and emit Server-Sent Events for live progress. Sensitive prompts are blocked by default and persisted as blocked jobs with pattern IDs and byte offsets.
-4. **Local Receipt Store**: Added append-only JSONL storage under `.ghostprover/` for job snapshots and receipts. Receipts include `jobId`, preset, pattern IDs, commitment, target hashes, proof status, proof size, local `storageRoot`, timestamp, and local status. Live 0G upload/on-chain submission remains intentionally deferred.
+4. **Draft Receipt Store**: Added append-only JSONL storage under `.ghostprover/` for job snapshots and draft receipt records. Drafts include `jobId`, preset, pattern IDs, commitment, target hashes, proof status, proof size, cache `storageRoot`, timestamp, and status. The final compliance artifact is still the on-chain receipt.
 5. **MCP Integration**: Added `ghostprover mcp` for Claude Code / Codex / Antigravity-style workflows. MCP tools call the daemon for scan, attest, job lookup, receipt listing, and preset listing.
 6. **React Console Connected to Daemon**: The frontend now reads real daemon config/registry/receipts, performs real scan/attest API calls, listens for SSE job and receipt events, and shows daemon connectivity status.
 7. **Documentation + Structure**: Moved agent code into `src/agent/` and added `docs/background-agent-workflow.md` with a clean Mermaid flowchart explaining the full workflow.
 
-**Summary — GhostProver now behaves like a local background compliance agent. Coding-agent tools can call MCP, the daemon enforces company policy, clean prompts get proof jobs, risky prompts are blocked, and the dashboard shows the same local audit trail.**
+**Summary — GhostProver now behaves like a background compliance agent. Coding-agent tools can call MCP, the daemon enforces company policy, clean prompts get proof jobs, risky prompts are blocked, and the dashboard shows the same draft queue.**
 
 **Issues:** Live 0G Storage and on-chain batch submission are still not wired into the daemon by design. Full four-pattern SaaS proof batches work but are slow on the WASM backend, so demos should use queued/progress UX or a one-pattern sample when time is limited.
 
 **Tomorrow's Plan:**
 - Add a short setup guide for connecting the MCP server to Claude Code / Codex / Antigravity.
 - Add automated daemon API tests around config loading, blocked prompts, queued jobs, and receipt persistence.
-- Add a future adapter for replacing local `storageRoot` with live 0G Storage and `txHash` once testnet credentials are ready.
+- Add a future adapter for replacing draft cache roots with live 0G Storage and `txHash` once testnet credentials are ready.
 
 ---
 
 ### 15 May 2026 (Phase 8 — Hackathon Product Readiness)
 1. **Judge Demo Mode Added**: `npm run demo:judge` now resets and seeds a local `.ghostprover/` audit trail with a clean receipt and a blocked prompt. Judges can open the console and immediately see receipt history without waiting for a full proof batch.
 2. **Daemon API Tests Added**: `npm run test:daemon` starts an isolated test daemon, verifies health/config/preset loading, confirms custom registry merging, checks blocked prompt detection, persists a blocked job, and verifies job/receipt API responses.
-3. **One-Proof Acceptance Test Added**: `npm run test:proof:single` runs a real background proof for one SaaS pattern, polls the daemon job endpoint, and verifies the local receipt includes proof size + storage root.
+3. **One-Proof Acceptance Test Added**: `npm run test:proof:single` runs a real background proof for one SaaS pattern, polls the daemon job endpoint, and verifies the draft receipt record includes proof size + storage root.
 4. **Registry Expanded**: Added enterprise patterns for Google API keys, Slack tokens, JWT-like values, Bearer tokens, Postgres connection URLs, and Indian IFSC codes. SaaS/banking/fintech/India KYC presets now feel closer to real company policy.
 5. **Custom Registry Examples Added**: `examples/custom-registry.json` and `.ghostprover.custom.example.json` show how a company can define internal customer IDs, deploy tokens, employee IDs, and an internal preset without editing source code.
 6. **Frontend Demo Flow Improved**: The React console now has a Submission Proof panel, clearer daemon error states, local storage visibility, workflow status steps, and better disabled states when the daemon is offline.
@@ -150,12 +150,31 @@ For the current product overview, use [README.md](../README.md). For a concise h
 
 **Summary — GhostProver is now packaged like a hackathon product instead of only a technical prototype: judges can run it quickly, see the agent workflow, inspect docs, verify daemon behavior, and run one real proof path.**
 
-**Issues:** Full multi-pattern proof batches are still slow on the WASM backend. Live 0G Storage + Chain anchoring is intentionally pending and should be wired through the existing local receipt adapter.
+**Issues:** Full multi-pattern proof batches are still slow on the WASM backend. Live 0G Storage + Chain anchoring is intentionally pending and should be wired through the existing draft receipt adapter.
 
 **Tomorrow's Plan:**
 - Record the 3-minute demo using the new judge script and console flow.
 - Add live 0G Storage root + Chain tx hash into the daemon receipt adapter.
 - Replace the MCP manual tool-call flow with deeper editor/provider interception once the target agent environment is finalized.
+
+---
+
+### 16 May 2026 (Phase 9 — Mainnet Receipt + Unified Product API)
+1. **0G Mainnet Receipts Verified**: Confirmed two live `ComplianceBatchReceiptIssued` events on the deployed 0G mainnet registry. The full SaaS preset receipt is `0xc4eeb667eeb53d41bd2d02131fde5927214b5675d05db7b317770b09a2f61a0d` with 9 target hashes, provider `0x992e6396157Dc4f22E74F2231235D7DE62696db5`, model `qwen3.6-plus`, and storage root `0x2395675625684a9af61f7f1cab499108f20cf789d106211a5d1fb426f9299700`.
+2. **Receipt Evidence Checked In**: Added `docs/mainnet-receipts.md` and `Chain/deployments/0g-mainnet-receipts.json` so judges can inspect the deployed registry, receipt tx hashes, storage roots, provider, model, and target hashes without re-querying the chain manually.
+3. **Backends Unified at Product Layer**: The React console continues to use the local `/v1/*` daemon, and the daemon now optionally delegates live 0G submission to the Compute orchestrator when `onChainSubmit` is enabled. This keeps frontend/MCP integrations pointed at one product API.
+4. **Daemon 0G Receipt Adapter Added**: `src/agent/zerog-adapter.ts` shells into `Compute/src/orchestrator.ts` with the clean prompt and pattern IDs. The resulting receipt can now store `txHash`, provider address, model ID, and live 0G Storage root in `.ghostprover/receipts.jsonl`.
+5. **Mainnet Config Examples Added**: `Compute/.env.example` now includes the deployed registry, and `Compute/.env.mainnet.example` plus `examples/.ghostprover.mainnet.example.json` document the exact mainnet daemon/orchestrator setup.
+6. **Frontend Receipt Fields Expanded**: Receipt panels now display tx hash, provider, model, local/on-chain status, and failed 0G submission state.
+
+**Summary — GhostProver now has a clean judge story: deployed 0G contracts, verified live mainnet batch receipts, and a single local product API that can hand off clean prompts to the live 0G pipeline.**
+
+**Issues:** Live daemon-to-0G submission is intentionally opt-in because it runs a paid mainnet/storage flow and may regenerate proofs through the Compute orchestrator. Compute dependencies must be installed in `Compute/` before using this path.
+
+**Tomorrow's Plan:**
+- Run one fresh daemon-driven mainnet submission from the React console with `onChainSubmit=true`.
+- Replace the shell-out adapter with a direct library adapter if time allows after the hackathon demo.
+- Add explorer links once the preferred 0G explorer URL is finalized.
 
 ---
 
@@ -172,8 +191,9 @@ For the current product overview, use [README.md](../README.md). For a concise h
 | CLI Tool (scan/prove/init) | ✅ Complete — full command-line interface | P1 |
 | Express Middleware | ✅ Complete — auto-intercept + background proofs | P1 |
 | Background Compliance Daemon | ✅ Complete — scan/attest API, SSE, JSONL receipts | P1 |
+| Daemon 0G Adapter | ✅ Complete — optional Compute orchestrator handoff for live receipts | P1 |
 | MCP Server | ✅ Complete — agent tools call local daemon | P1 |
-| Judge Demo Mode | ✅ Complete — seeded local audit trail + quickstart | P1 |
+| Judge Demo Mode | ✅ Complete — seeded draft queue + quickstart | P1 |
 | Daemon API Tests | ✅ Complete — config, registry, scan, blocked job | P1 |
 | One-Proof Acceptance Test | ✅ Complete — real daemon proof path | P1 |
 | GhostProverRegistry.sol | ✅ Complete — 7 tests pass, batch proofs added | P1 |
@@ -183,4 +203,5 @@ For the current product overview, use [README.md](../README.md). For a concise h
 | 0G Chain testnet deploy | ✅ Deploy0GTestnet.s.sol ready | P2 |
 | 0G Storage integration | ✅ storage.ts (upload + Merkle root) | P3 |
 | Orchestrator backend | ✅ orchestrator.ts wires full pipeline | P3 |
+| 0G Mainnet Receipt Evidence | ✅ Complete — two live batch receipts documented | P1/P3 |
 | React frontend | ✅ Complete — daemon-connected operator console | P1 |

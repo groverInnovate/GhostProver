@@ -14,6 +14,7 @@ It combines architecture notes, integration guides, demo material, planning cont
 | `api.md` | Local daemon API reference |
 | `mcp-setup.md` | MCP setup notes for agent-based tooling |
 | `demo-script.md` | Demo walkthrough for presentations and judging |
+| `mainnet-receipts.md` | Live 0G mainnet receipt transactions and query command |
 | `limitations.md` | Current scope notes and future extension ideas |
 | `project-plan.md` | Original project framing and build plan |
 | `implementation-log.md` | Detailed milestone and implementation log |

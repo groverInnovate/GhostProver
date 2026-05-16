@@ -63,11 +63,12 @@ flowchart LR
   Scan -->|Sensitive data found| Block["Block response\npersist blocked job"]
   Scan -->|Clean prompt| Queue["Background proof job"]
   Queue --> Batch["Batch prover\nNoir + bb.js"]
-  Batch --> Receipt["Local JSONL receipt\ncommitment + target hashes"]
+  Batch --> Draft["Draft receipt cache\ncommitment + target hashes"]
   Live["0G Compute Direct\nTEE verified inference"] --> Orchestrator["Compute orchestrator"]
+  Draft --> Orchestrator
   Orchestrator --> Storage["0G Storage audit bundle"]
   Orchestrator --> Chain["0G Chain registry receipt"]
-  Receipt --> Stack0G["0G adapters\nCompute + Storage + Chain"]
+  Chain --> Receipt["On-chain 0G receipt\ntx hash + storage root"]
   Daemon --> Console
 ```
 
@@ -184,6 +185,7 @@ Core documentation:
 - [`docs/api.md`](docs/api.md) — local daemon API contract
 - [`docs/mcp-setup.md`](docs/mcp-setup.md) — MCP setup notes
 - [`docs/demo-script.md`](docs/demo-script.md) — demo walkthrough
+- [`docs/mainnet-receipts.md`](docs/mainnet-receipts.md) — live 0G mainnet receipt transactions
 
 Custom registry examples:
 
@@ -244,11 +246,10 @@ bb write_vk -b ./target/ghostprover.json -o ./target --oracle_hash keccak
 bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol
 ```
 
-## Local Receipt Demo
+## Contract Receipt Demo
 
-This repository also includes a **demo-mode** local receipt flow. It proves the
-ZK proof can be generated and verified on-chain locally without spending
-mainnet funds.
+The repository includes a local proof-to-contract demo flow for quickly
+validating the on-chain receipt path before spending 0G mainnet funds.
 
 ```bash
 # terminal 1
@@ -262,7 +263,7 @@ npm run demo:deploy
 npm run demo:receipt
 ```
 
-You can also generate a fresh proof fixture and run the local receipt tests with:
+You can also generate a fresh proof fixture and run the receipt contract tests with:
 
 ```bash
 cd Compute
@@ -316,6 +317,27 @@ npm run orchestrate -- --preset saas
 
 If an SDK cannot auto-detect the correct chain contracts, set the relevant Compute contract addresses in `Compute/.env`.
 
+### 4. Use the React console against 0G mainnet
+
+The frontend talks to the local `/v1/*` daemon. To make that same UI submit
+through the live 0G pipeline, copy
+[`examples/.ghostprover.mainnet.example.json`](examples/.ghostprover.mainnet.example.json)
+to `.ghostprover.json`, copy
+[`Compute/.env.mainnet.example`](Compute/.env.mainnet.example) to
+`Compute/.env`, set `PRIVATE_KEY`, then run:
+
+```bash
+npm run daemon
+cd Frontend
+npm run dev
+```
+
+When `onChainSubmit` is `true`, clean attestations still start from
+`POST /v1/attest`, but the daemon hands final receipt submission to the
+Compute orchestrator and stores the resulting `txHash`, provider, model, and
+0G Storage root in `.ghostprover/receipts.jsonl`. Without `onChainSubmit`, that
+file is only a draft queue/debug cache, not the final compliance artifact.
+
 ## Repository Layout
 
 ```text
@@ -344,6 +366,7 @@ If an SDK cannot auto-detect the correct chain contracts, set the relevant Compu
 │   ├── api.md
 │   ├── mcp-setup.md
 │   ├── demo-script.md
+│   ├── mainnet-receipts.md
 │   ├── project-plan.md
 │   ├── implementation-log.md
 │   └── handoff-summary.md

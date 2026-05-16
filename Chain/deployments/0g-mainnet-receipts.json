@@ -1,0 +1,41 @@
+{
+  "chainId": 16661,
+  "network": "0g-mainnet",
+  "registry": "0x9595BD4e6b868C64001904EeF76d838D78604B6e",
+  "receipts": [
+    {
+      "type": "ComplianceBatchReceiptIssued",
+      "txHash": "0x13d66003114e12ef497abf98c4dc30f12efe81c4b90202a5d4385b0aeb01eb04",
+      "blockNumber": 33386820,
+      "commitment": "0x005aceac822b01445b6bc84818f86ca42d5f7e288274f68bc3917d1606f695f0",
+      "submitter": "0xc4a1f0A1c24C0De86Cd15543670EE7e0C9cC251B",
+      "providerAddress": "0x992e6396157Dc4f22E74F2231235D7DE62696db5",
+      "modelId": "qwen3.6-plus",
+      "storageRoot": "0x75f25717c16fbddafd89ea64ce59d8a4d778d6f187273d38769303b35509a457",
+      "targetHashes": [
+        "0x0232d0e56f47689de963dfc91e786dcc8b82629cc86f8920b1fc3425fb5a65d6"
+      ]
+    },
+    {
+      "type": "ComplianceBatchReceiptIssued",
+      "txHash": "0xc4eeb667eeb53d41bd2d02131fde5927214b5675d05db7b317770b09a2f61a0d",
+      "blockNumber": 33387304,
+      "commitment": "0x005aceac822b01445b6bc84818f86ca42d5f7e288274f68bc3917d1606f695f0",
+      "submitter": "0xc4a1f0A1c24C0De86Cd15543670EE7e0C9cC251B",
+      "providerAddress": "0x992e6396157Dc4f22E74F2231235D7DE62696db5",
+      "modelId": "qwen3.6-plus",
+      "storageRoot": "0x2395675625684a9af61f7f1cab499108f20cf789d106211a5d1fb426f9299700",
+      "targetHashes": [
+        "0x0232d0e56f47689de963dfc91e786dcc8b82629cc86f8920b1fc3425fb5a65d6",
+        "0x02932d9fdfd34100b0af24f6d44e762956dcd61e638364ea551f500d65588db8",
+        "0x03544ac77ca19bb805f5366378aba188b92fbc4939e0c077ee9d0f4cc9dfe5ff",
+        "0x16be1a37fab26e7cfbe6415f446a7d3e162415c577dbc9b98e40014f1c719f50",
+        "0x24181286afe39ae872937827c2fad11a19bcf49e29eb288116f0cf3b74fb6aba",
+        "0x0da879cdddcd673683652db8dea841e7b47c916a08a618fa9b9d355c186f063c",
+        "0x1cc0270d5c9d31299f5691f3e7690d67e5cba8b06b2abea2a1621bcca79d262d",
+        "0x1e172abfdceb49a4765869556f30833cd354b8dd178727e446e29db9dc2e3a07",
+        "0x0f4d665c486d1a6c9b026e7945c249126cfc74b83c3549bb726671da80133e6a"
+      ]
+    }
+  ]
+}
