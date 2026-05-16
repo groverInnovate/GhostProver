@@ -8,11 +8,11 @@
   <a href="./README.md">English</a> | <a href="./README.zh-CN.md">简体中文</a>
 </p>
 
-GhostProver is a privacy-preserving compliance layer for AI workflows built around Zero-Knowledge proofs and the 0G stack.
+GhostProver is a compliance product for AI inference.
 
 It proves that sensitive data such as Aadhaar numbers, PAN cards, API keys, credit card numbers, and other regulated identifiers were **not** present in an AI prompt, without revealing the prompt itself.
 
-The result is a verifiable compliance receipt that can be generated locally, archived, and anchored on-chain.
+The result is a verifiable compliance receipt that can be reviewed internally, archived, and submitted on-chain.
 
 ## Judge Quickstart
 
@@ -47,41 +47,40 @@ At the core of GhostProver is a Noir circuit that proves:
 3. the target string or pattern does **not** appear anywhere in the prompt
 4. the exact rule checked hashes to a public **pattern hash**
 
-This lets verifiers confirm a compliance property about the prompt without learning the prompt contents.
+This gives teams a way to prove a compliance claim about a prompt without exposing the prompt itself.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  User["Developer / Agent Workflow"] --> MCP["GhostProver MCP tools"]
-  Console["React operator console"] --> Daemon["Local daemon\nHTTP + SSE"]
-  MCP --> Daemon
-  Daemon --> Policy[".ghostprover.json\npolicy + custom registry"]
-  Policy --> Scan["Pattern scan\nprivate prompt bytes"]
-  Scan -->|Sensitive data found| Block["Block response\npersist blocked job"]
-  Scan -->|Clean prompt| Queue["Background proof job"]
-  Queue --> Batch["Batch prover\nNoir + bb.js"]
-  Batch --> Receipt["Local JSONL receipt\ncommitment + target hashes"]
-  Receipt --> Stack0G["0G adapters\nCompute + Storage + Chain"]
-  Daemon --> Console
-```
+![GhostProver architecture overview](docs/assets/architecture.png)
 
-## Key Features
+## Visual Overview
 
-- **Generic Pattern Matching**: 9 built-in character classes such as `DIGIT`, `ALPHA`, `ALPHANUM`, `HEX`, and `BASE64` are evaluated in-circuit.
+The repository now includes presentation-ready diagram assets under [`docs/assets/`](docs/assets/README.md) for explaining the system at a glance.
+
+### Single Prompt Decision Flow
+
+![GhostProver single prompt decision flow](docs/assets/prompt.png)
+
+### ZK Proof Lifecycle
+
+![GhostProver ZK proof lifecycle](docs/assets/proof.png)
+
+## Product Capabilities
+
+- **Pattern-Based Detection**: 9 built-in character classes such as `DIGIT`, `ALPHA`, `ALPHANUM`, `HEX`, and `BASE64` are evaluated in-circuit.
 - **Industry Presets**: bundled registries for `india_kyc`, `banking`, `fintech`, `healthcare`, and `saas`, plus support for custom company registries.
-- **Parallel Batch Prover**: multiple non-inclusion proofs can be generated concurrently for a single prompt commitment.
-- **On-Chain Batch Receipts**: smart contract logic groups multiple proofs into a single compliance receipt flow.
-- **SDK, CLI, and Middleware**: GhostProver can be embedded into Node.js systems, terminal workflows, and HTTP middleware.
-- **Background Agent + MCP**: a local daemon, MCP bridge, and operator console make the system usable in real agent-assisted workflows.
+- **Batch Proof Generation**: multiple non-inclusion proofs can be generated concurrently for a single prompt commitment.
+- **On-Chain Receipts**: smart contract logic supports both single and batch receipt submission.
+- **Developer Integration Surface**: TypeScript SDK, CLI, and Express middleware for application teams.
+- **Agent Workflow Support**: a local daemon, MCP bridge, and operator console for coding-agent and internal review workflows.
 
 ## How GhostProver Uses 0G
 
-GhostProver is designed to span the major layers of the 0G stack instead of using only one isolated component.
+GhostProver uses the 0G stack as the execution, storage, and receipt backbone for the product.
 
 ### 1. 0G Private Compute / Compute Network
 
-The Compute integration is responsible for running inference through 0G-backed infrastructure and capturing TEE-related metadata used by the compliance flow.
+The Compute integration runs inference through 0G-backed infrastructure and captures the TEE-related metadata used by the compliance flow.
 
 In the repository, the `Compute/` workspace handles:
 
@@ -97,11 +96,11 @@ Key files:
 - [`Compute/src/verify-attestation.ts`](Compute/src/verify-attestation.ts)
 - [`Compute/src/orchestrator.ts`](Compute/src/orchestrator.ts)
 
-The Compute layer is where GhostProver collects the inference-side evidence needed to pair TEE-backed execution with ZK-based compliance proofs.
+This is where GhostProver collects the inference-side evidence needed to pair TEE-backed execution with ZK compliance proofs.
 
 ### 2. 0G Storage
 
-GhostProver uses 0G Storage as the archival layer for audit bundles.
+GhostProver uses 0G Storage as the archive for audit bundles.
 
 An audit bundle can include:
 
@@ -119,9 +118,9 @@ Key file:
 
 ### 3. 0G Chain
 
-0G Chain is used as the settlement and receipt layer.
+0G Chain is the receipt and settlement layer.
 
-Once a proof is generated, GhostProver can submit it to the on-chain registry, where the Solidity verifier checks the proof and emits a compliance receipt event.
+Once a proof is generated, GhostProver submits it to the on-chain registry, where the Solidity verifier checks the proof and emits a compliance receipt event.
 
 That receipt can bind together:
 
@@ -139,20 +138,20 @@ Key files:
 
 ### 4. Why the 0G pairing matters
 
-GhostProver is not only a ZK proof library and not only a TEE wrapper.
+GhostProver is not just a proof library and not just a TEE wrapper.
 
-The product is built around the combination of:
+The product combines:
 
 - **0G Compute** for verifiable inference context
 - **Zero-Knowledge proofs** for privacy-preserving compliance claims
 - **0G Storage** for durable audit archival
 - **0G Chain** for independently verifiable receipts
 
-That combination is what turns a prompt-compliance check into a reusable compliance artifact.
+That combination turns a prompt-compliance check into a reusable compliance record.
 
 ## TypeScript SDK and CLI
 
-GhostProver provides a TypeScript SDK and CLI for integrating Zero-Knowledge compliance checks into Node.js applications and developer tooling.
+GhostProver provides a TypeScript SDK and CLI for integrating these checks into Node.js applications and internal tooling.
 
 ### CLI Usage
 
@@ -211,7 +210,7 @@ GhostProver also ships with a local daemon that acts as the source of truth for:
 - persisted receipts
 - live workflow updates over SSE
 
-This makes it suitable for agent tooling, internal operator consoles, and local compliance workflows without requiring a custom backend from day one.
+This makes it practical for agent tooling, internal operator consoles, and local compliance workflows without requiring a custom backend from day one.
 
 Related components:
 

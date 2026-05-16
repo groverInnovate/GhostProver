@@ -66,6 +66,22 @@ flowchart LR
   Daemon --> Console
 ```
 
+## 可视化概览
+
+仓库现在在 [`docs/assets/`](docs/assets/README.zh-CN.md) 下提供了适合演示与说明的图示资源。
+
+### 架构总览
+
+![GhostProver architecture overview](docs/assets/architecture.png)
+
+### 单个 Prompt 决策流程
+
+![GhostProver single prompt decision flow](docs/assets/prompt.png)
+
+### ZK 证明生命周期
+
+![GhostProver ZK proof lifecycle](docs/assets/proof.png)
+
 ## 核心特性
 
 - **通用模式匹配**：内置 `DIGIT`、`ALPHA`、`ALPHANUM`、`HEX`、`BASE64` 等 9 类字符类别，并在电路中进行验证
