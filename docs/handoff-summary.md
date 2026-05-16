@@ -1,6 +1,12 @@
-# GhostProver v2: Generic ZK Compliance Engine - Handoff Summary
+# GhostProver v2 Handoff Summary
 
-This document serves as a complete context snapshot for any coding agent or developer continuing work on GhostProver.
+This document is a concise handoff snapshot for any developer or coding agent continuing work on GhostProver.
+
+It complements, but does not replace:
+
+- [README.md](../README.md) for the current product overview
+- [implementation-log.md](implementation-log.md) for the detailed implementation history
+- [project-plan.md](project-plan.md) for original planning context
 
 ## 1. Project Evolution & Architecture
 GhostProver has been successfully upgraded from a single-string exact matcher to **GhostProver v2**, a generic, enterprise-grade ZK compliance attestation service.

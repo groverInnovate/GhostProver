@@ -1,144 +1,87 @@
 # GhostProver — Chain
 
-Solidity smart contracts for verifying GhostProver ZK proofs on-chain and issuing compliance receipts on 0G Chain.
+This folder contains the Solidity and Foundry workspace for GhostProver's on-chain receipt layer.
 
----
+Its role is straightforward: verify GhostProver proofs against the generated verifier contract and emit compliance receipts on 0G Chain.
 
-## Overview
+## Purpose
 
-This directory contains the on-chain verification layer for GhostProver. It does one thing: take a Barretenberg Honk ZK proof from the Compute layer, verify it against the Noir-generated verifier contract, and emit a tamper-proof `ComplianceReceiptIssued` event anchoring the proof to a 0G Compute TEE provider and a 0G Storage audit bundle.
+The Chain layer is responsible for:
 
----
+- verifying proof validity on-chain
+- emitting receipt events for accepted submissions
+- supporting both single-proof and batch-proof receipt flows
+- carrying provider, model, and storage-root metadata alongside proof results
 
-## Contracts
+This is the settlement layer for the broader GhostProver stack.
 
-| Contract | Description |
+## Core Contracts
+
+| Contract | Role |
 |---|---|
-| `src/GhostProverRegistry.sol` | Core registry. Verifies the ZK non-inclusion proof and emits a `ComplianceReceiptIssued` event with 0G Compute + Storage fields. |
-| `src/generated/Verifier.sol` | Auto-generated Honk verifier (Barretenberg). **Do not edit manually** — regenerate with `bb write_solidity_verifier` if the Noir circuit changes. |
+| `src/GhostProverRegistry.sol` | Main registry contract for single and batch compliance receipt submission |
+| `src/generated/Verifier.sol` | Auto-generated Solidity verifier derived from the Noir circuit |
 
----
+`Verifier.sol` is generated output and should not be edited manually.
 
-## Current State
+## Workspace Layout
 
-- ✅ `GhostProverRegistry` compiles and is deployed locally on Anvil  
-- ✅ ZK proof verification works end-to-end against the Noir circuit (7/7 tests passing)  
-- ✅ Event shape includes `providerAddress`, `modelId`, `storageRoot`, plus batch receipts for presets  
-- ✅ Fixtures in `fixtures/` regenerated and validated against the current circuit  
-- ✅ Network-neutral 0G deploy script writes `deployments/0g-mainnet.json` on mainnet  
-
----
-
-## Directory Structure
-
-```
+```text
 Chain/
 ├── src/
-│   ├── GhostProverRegistry.sol   # Core contract (edit this)
+│   ├── GhostProverRegistry.sol
 │   └── generated/
-│       └── Verifier.sol          # Auto-generated — do not touch
+│       └── Verifier.sol
 ├── script/
-│   ├── DeployLocal.s.sol         # Foundry broadcast script for local Anvil
-│   └── Deploy0G.s.sol            # Network-neutral 0G deploy script
+│   ├── DeployLocal.s.sol
+│   ├── Deploy0G.s.sol
+│   └── Deploy0GTestnet.s.sol
 ├── test/
-│   └── GhostProverRegistry.t.sol # 7 Forge tests
+│   └── GhostProverRegistry.t.sol
 ├── fixtures/
-│   ├── proof.bin                 # Pre-generated ZK proof (binary)
-│   ├── public_inputs.bin         # 64 bytes: commitment ‖ targetHash
-│   └── metadata.json             # Fixture metadata (prompt, target, hashes, timing)
+│   ├── proof.bin
+│   ├── public_inputs.bin
+│   └── metadata.json
 ├── deployments/
-│   └── local.json                # Written by DeployLocal.s.sol — Anvil addresses
-├── foundry.toml                  # Foundry config
-└── lib/forge-std/                # Foundry standard library (git submodule)
+├── foundry.toml
+└── lib/forge-std/
 ```
 
----
+## Receipt Model
 
-## Event Shape
+The registry emits compliance receipts that can bind together:
 
-```solidity
-event ComplianceReceiptIssued(
-    bytes32 indexed commitment,    // Poseidon2 hash of the AI prompt
-    bytes32 indexed targetHash,    // Poseidon2 hash of the sensitive field proven absent
-    address indexed submitter,     // wallet that submitted the tx
-    address providerAddress,       // 0G Compute TEE provider (zero in demo mode)
-    string  modelId,               // AI model used, e.g. "qwen-2.5-7b-instruct" (empty in demo)
-    bytes32 storageRoot,           // 0G Storage Merkle root of audit bundle (zero in demo)
-    uint256 timestamp              // block.timestamp
-);
-```
+- prompt commitment
+- target or pattern hash
+- submitter
+- provider address
+- model identifier
+- storage root
+- timestamp
 
----
+Batch receipt support allows multiple target hashes to be submitted under a shared commitment and metadata payload.
 
-## Quick Start
+## Common Commands
 
-### Prerequisites
-
-```bash
-# Install Foundry
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
-
-# Verify
-forge --version   # >= 0.3.x
-anvil --version
-```
-
-### 1 — Generate proof fixtures (first time or when circuit changes)
-
-The Forge tests read pre-built proof fixtures from `fixtures/`. Generate them from the Compute layer:
-
-```bash
-cd ../Compute
-npm install
-npm run demo:fixture      # writes Chain/fixtures/proof.bin + public_inputs.bin
-```
-
-### 2 — Run the test suite
+### Run the test suite
 
 ```bash
 cd Chain
 forge test -vvv
 ```
 
-Expected:
-```
-Ran 5 tests for test/GhostProverRegistry.t.sol:GhostProverRegistryTest
-[PASS] testTamperedCommitmentRejected()
-[PASS] testTamperedProofRejected()
-[PASS] testTamperedTargetHashRejected()
-[PASS] testValidProofEmitsReceipt()
-[PASS] testValidProofWithComputeFields()
-5 passed; 0 failed
-```
-
-### 3 — Full local demo (proof → deploy → receipt)
+### Local deploy
 
 ```bash
-# Terminal 1: start local chain
 anvil
 
-# Terminal 2: deploy contracts, writes Chain/deployments/local.json
 cd Chain
 forge script script/DeployLocal.s.sol \
   --rpc-url http://127.0.0.1:8545 \
   --broadcast
-
-# Terminal 3: generate proof + submit receipt + tamper check
-cd Compute
-npm run demo:receipt
 ```
 
-### 4 — One-shot test (regenerate fixtures + run forge tests)
-
-```bash
-cd Compute
-npm run demo:test
-```
-
-This runs `write-proof-fixture` → `forge test` in one command. Use this to validate end-to-end after any circuit or contract change.
-
-### 5 — Deploy to 0G mainnet
+### Mainnet deploy
 
 ```bash
 cd Chain
@@ -148,60 +91,29 @@ forge script script/Deploy0G.s.sol:Deploy0G \
   --broadcast
 ```
 
-This writes `deployments/0g-mainnet.json`. Copy the `registry` address into
-`Compute/.env` as `REGISTRY_ADDRESS` before running `npm run orchestrate`.
-
----
-
-## What the Tests Cover
-
-| Test | What it checks |
-|---|---|
-| `testValidProofEmitsReceipt` | Valid proof + commitment + targetHash → `ComplianceReceiptIssued` emitted, all fields correct (demo mode: zero 0G fields) |
-| `testValidProofWithComputeFields` | Same proof but with real provider address, model ID, and storage root → verifies those fields are correctly stored and emitted |
-| `testTamperedProofRejected` | Flip one byte in the proof → transaction reverts with `invalid proof` |
-| `testTamperedCommitmentRejected` | XOR one bit on commitment → transaction reverts |
-| `testTamperedTargetHashRejected` | XOR one bit on targetHash → transaction reverts |
-| `testBatchReceiptEmitsEvent` | Valid proof batch emits `ComplianceBatchReceiptIssued` |
-| `testBatchReceiptLengthMismatchRejected` | Mismatched batch arrays revert |
-
----
-
-## Regenerating `Verifier.sol`
-
-If the Noir circuit (`Circuit/ghostprover/src/main.nr`) changes, the Solidity verifier must be regenerated:
+### Regenerate local fixtures and rerun demo tests
 
 ```bash
-cd ../Circuit/ghostprover
-
-# Recompile circuit
-nargo execute
-
-# Regenerate proof artifacts
-bb prove -b ./target/ghostprover.json -w ./target/ghostprover.gz -o ./target --oracle_hash keccak
-bb write_vk -b ./target/ghostprover.json -o ./target --oracle_hash keccak
-bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol
-
-# Copy to Chain (or use the npm script)
-cd ../../Compute
-npm run demo:verifier     # copies and regenerates Chain/src/generated/Verifier.sol
-```
-
-Then regenerate fixtures and re-run tests:
-```bash
+cd Compute
 npm run demo:test
 ```
 
----
+## Test Coverage
 
-## Mainnet E2E
+The Foundry suite validates:
 
-The Compute layer now passes live provider, model, and 0G Storage root into
-`submitReceipt()` for exact mode and `submitBatchReceipt()` for preset mode.
-Run:
+- valid proof acceptance
+- tampered proof rejection
+- tampered commitment rejection
+- tampered target-hash rejection
+- compute-field emission
+- batch receipt submission
+- batch length mismatch rejection
 
-```bash
-cd ../Compute
-npm run inference -- "In one sentence, explain zero-knowledge proofs."
-npm run orchestrate -- --preset saas
-```
+## Relationship to the Rest of the Repo
+
+- The circuit definition lives in [`../Circuit/`](../Circuit/README.md)
+- Proof generation and orchestration live in [`../Compute/`](../Compute/README.md)
+- The main TypeScript SDK lives in [`../src/`](../src/README.md)
+
+For a product-level overview, start with the root [README](../README.md).
