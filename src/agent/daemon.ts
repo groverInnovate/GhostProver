@@ -107,6 +107,25 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<http.Ser
   return server;
 }
 
+const RATE_LIMIT_WINDOW_MS = 60000;
+const MAX_REQUESTS_PER_WINDOW = 60;
+const rateLimits = new Map<string, { count: number; resetAt: number }>();
+
+function enforceRateLimit(req: http.IncomingMessage): boolean {
+  const ip = req.socket.remoteAddress || "unknown";
+  const now = Date.now();
+  let record = rateLimits.get(ip);
+
+  if (!record || now > record.resetAt) {
+    record = { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
+    rateLimits.set(ip, record);
+    return true;
+  }
+
+  record.count += 1;
+  return record.count <= MAX_REQUESTS_PER_WINDOW;
+}
+
 async function route(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -123,6 +142,10 @@ async function route(
     res.writeHead(204);
     res.end();
     return;
+  }
+
+  if (!enforceRateLimit(req)) {
+    throw new ApiError(429, "Too many requests", "RATE_LIMIT_EXCEEDED");
   }
 
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "127.0.0.1"}`);

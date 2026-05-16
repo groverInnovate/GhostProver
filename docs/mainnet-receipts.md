@@ -14,7 +14,7 @@ mainnet registry.
 
 ### One-Pattern Batch
 
-- Transaction: `0x13d66003114e12ef497abf98c4dc30f12efe81c4b90202a5d4385b0aeb01eb04`
+- Transaction: [`0x13d66003114e12ef497abf98c4dc30f12efe81c4b90202a5d4385b0aeb01eb04`](https://0g.exploreme.pro/tx/0x13d66003114e12ef497abf98c4dc30f12efe81c4b90202a5d4385b0aeb01eb04)
 - Block: `33386820`
 - Provider: `0x992e6396157Dc4f22E74F2231235D7DE62696db5`
 - Model: `qwen3.6-plus`
@@ -23,7 +23,7 @@ mainnet registry.
 
 ### Full SaaS Preset Batch
 
-- Transaction: `0xc4eeb667eeb53d41bd2d02131fde5927214b5675d05db7b317770b09a2f61a0d`
+- Transaction: [`0xc4eeb667eeb53d41bd2d02131fde5927214b5675d05db7b317770b09a2f61a0d`](https://0g.exploreme.pro/tx/0xc4eeb667eeb53d41bd2d02131fde5927214b5675d05db7b317770b09a2f61a0d)
 - Block: `33387304`
 - Provider: `0x992e6396157Dc4f22E74F2231235D7DE62696db5`
 - Model: `qwen3.6-plus`

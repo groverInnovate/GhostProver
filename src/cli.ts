@@ -22,7 +22,7 @@ import {
   listPatterns,
   getPatternsByPreset,
 } from "./registry/index.js";
-import { computeCommitment } from "./ghostprover.js";
+import { computeCommitment, verifyProof } from "./ghostprover.js";
 import { computePatternHash } from "./poseidon2.js";
 import { startDaemon } from "./agent/daemon.js";
 import { createDefaultConfig, resolveConfigPath } from "./agent/config.js";
@@ -71,6 +71,9 @@ interface ParsedArgs {
   concurrency?: number;
   output?: string;
   port?: number;
+  proof?: string;
+  commitment?: string;
+  targetHash?: string;
   help?: boolean;
 }
 
@@ -106,6 +109,15 @@ function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--port":
         result.port = parseInt(args[++i], 10);
+        break;
+      case "--proof":
+        result.proof = args[++i];
+        break;
+      case "--commitment":
+        result.commitment = args[++i];
+        break;
+      case "--target-hash":
+        result.targetHash = args[++i];
         break;
       case "--help":
       case "-h":
@@ -290,6 +302,44 @@ async function cmdProve(args: ParsedArgs) {
   }
 }
 
+async function cmdVerify(args: ParsedArgs) {
+  if (!args.proof || !args.commitment || !args.targetHash) {
+    console.error(
+      `${C.red}Error: --proof, --commitment, and --target-hash are required for verify command${C.reset}`
+    );
+    process.exit(1);
+  }
+
+  let proofBytes: Uint8Array;
+  try {
+    if (args.proof.endsWith('.hex')) {
+      const hexStr = fs.readFileSync(args.proof, "utf-8").trim();
+      proofBytes = Buffer.from(hexStr, "hex");
+    } else {
+      proofBytes = fs.readFileSync(args.proof);
+    }
+  } catch (err) {
+    console.error(`${C.red}Error reading proof file: ${(err as Error).message}${C.reset}`);
+    process.exit(1);
+  }
+
+  console.log(`${C.bold}Verifying proof...${C.reset}`);
+  console.log(`  Commitment:  ${C.dim}${args.commitment}${C.reset}`);
+  console.log(`  Target hash: ${C.dim}${args.targetHash}${C.reset}`);
+  console.log(`  Proof size:  ${C.dim}${proofBytes.length} bytes${C.reset}\n`);
+
+  const startTime = Date.now();
+  const isValid = await verifyProof(proofBytes, [args.commitment, args.targetHash]);
+  const timeMs = Date.now() - startTime;
+
+  if (isValid) {
+    console.log(`${C.bgGreen}${C.white} ✅ VERIFIED ${C.reset} ${C.green}Proof is cryptographically sound${C.reset} ${C.dim}(${timeMs}ms)${C.reset}`);
+  } else {
+    console.log(`${C.bgRed}${C.white} ❌ REJECTED ${C.reset} ${C.red}Proof is invalid or inputs do not match${C.reset} ${C.dim}(${timeMs}ms)${C.reset}`);
+    process.exit(1);
+  }
+}
+
 async function cmdInit() {
   const configPath = resolveConfigPath();
 
@@ -401,6 +451,7 @@ function cmdHelp() {
 ${C.bold}Commands:${C.reset}
   ${C.cyan}scan${C.reset}            Scan a prompt for sensitive data patterns (no proof)
   ${C.cyan}prove${C.reset}           Generate ZK proofs for all patterns in a preset
+  ${C.cyan}verify${C.reset}          Verify a raw proof against a commitment and target hash
   ${C.cyan}init${C.reset}            Create a .ghostprover.json config in current directory
   ${C.cyan}daemon${C.reset}          Start the local background compliance daemon
   ${C.cyan}mcp${C.reset}             Start the MCP server for Claude/Codex-style tools
@@ -415,6 +466,9 @@ ${C.bold}Options:${C.reset}
   ${C.yellow}--concurrency${C.reset}   Max parallel proofs (default: 3)
   ${C.yellow}--output, -o${C.reset}    Write proof results to JSON file
   ${C.yellow}--port${C.reset}          Daemon port override
+  ${C.yellow}--proof${C.reset}         Path to proof file (e.g. proof.bin)
+  ${C.yellow}--commitment${C.reset}    Hex string of the Poseidon2 prompt commitment
+  ${C.yellow}--target-hash${C.reset}   Hex string of the target or pattern hash
   ${C.yellow}--help, -h${C.reset}      Show this help
 
 ${C.bold}Examples:${C.reset}
@@ -457,6 +511,10 @@ async function main() {
       case "prove":
         if (args.help) { cmdHelp(); break; }
         await cmdProve(args);
+        break;
+      case "verify":
+        if (args.help) { cmdHelp(); break; }
+        await cmdVerify(args);
         break;
       case "init":
         await cmdInit();

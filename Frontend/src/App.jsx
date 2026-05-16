@@ -428,8 +428,19 @@ function App() {
 
         {apiError && (
           <div className="error-banner" role="status">
-            <AlertTriangle size={17} />
-            <span>{apiError}</span>
+            <div className="error-banner-content">
+              <AlertTriangle size={17} />
+              <span>{apiError}</span>
+            </div>
+            {!daemonOnline && (
+              <code className="error-code-snippet" onClick={(e) => {
+                navigator.clipboard.writeText("npm run daemon");
+                e.target.innerText = "Copied!";
+                setTimeout(() => e.target.innerText = "npm run daemon", 2000);
+              }} title="Click to copy">
+                npm run daemon
+              </code>
+            )}
           </div>
         )}
 
