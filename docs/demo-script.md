@@ -41,15 +41,17 @@ Open **Receipts**.
 Show:
 
 - commitment
-- local storage root
+- storage root
+- tx hash, provider, and model when mainnet submission is enabled
 - job ID
 - proof count
 - receipt history
 
 Say:
 
-"The local receipt shape is ready for 0G Storage and 0G Chain anchoring. Live
-0G integration plugs into this receipt adapter."
+"The dashboard uses one product API. Draft records keep the workflow observable
+while proofs run, but the compliance artifact is the 0G receipt: storage root,
+provider, model, and on-chain transaction."
 
 ## 2:40-3:00 — Close
 

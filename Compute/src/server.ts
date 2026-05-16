@@ -99,7 +99,7 @@ app.get('/api/samples', (_req, res) => {
         provider: log.provider ?? null,
         model: log.model ?? null,
         timestamp: log.timestamp ?? null,
-        attestationValid: log.zerogAuth?.parsed?.signature ? true : false,
+        attestationValid: log.teeVerified === true || Boolean(log.zerogAuth?.parsed?.signature),
       };
     } catch {
       return { file: f, prompt: '', provider: null, model: null, timestamp: null, attestationValid: false };

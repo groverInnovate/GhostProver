@@ -88,7 +88,7 @@ function receiptForJob(job: StoredJob, patternIds: string[]): StoredReceipt {
     targetHashes,
     proofStatuses,
     storageRoot: sha256Hex(JSON.stringify(auditBundle)),
-    status: "local",
+    status: "draft",
     createdAt,
   };
 }
@@ -125,7 +125,7 @@ function main() {
   console.log("  npm run daemon");
   console.log("  cd Frontend && npm run dev");
   console.log("");
-  console.log("Open the console, show the local receipt history, then scan:");
+  console.log("Open the console, show the draft receipt queue, then scan:");
   console.log(`  Clean: ${cleanPrompt}`);
   console.log(`  Blocked: ${riskyPrompt}`);
 }

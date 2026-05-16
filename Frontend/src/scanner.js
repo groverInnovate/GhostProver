@@ -49,10 +49,12 @@ export function matchesClass(byte, classType, classValue = 0) {
 function getPatternArrays(pattern) {
   const types = new Array(32).fill(0);
   const values = new Array(32).fill(0);
-  pattern.types.forEach((value, index) => {
+  const patternTypes = pattern.types ?? pattern.pattern_types ?? [];
+  const patternValues = pattern.values ?? pattern.pattern_values ?? [];
+  patternTypes.forEach((value, index) => {
     types[index] = value;
   });
-  pattern.values?.forEach((value, index) => {
+  patternValues.forEach((value, index) => {
     values[index] = value;
   });
   return { types, values };
@@ -60,10 +62,11 @@ function getPatternArrays(pattern) {
 
 export function scanSinglePattern(promptBytes, pattern) {
   const { types, values } = getPatternArrays(pattern);
+  const targetLen = pattern.len ?? pattern.target_len;
 
-  for (let offset = 0; offset <= promptBytes.length - pattern.len; offset += 1) {
+  for (let offset = 0; offset <= promptBytes.length - targetLen; offset += 1) {
     let matched = true;
-    for (let j = 0; j < pattern.len; j += 1) {
+    for (let j = 0; j < targetLen; j += 1) {
       if (!matchesClass(promptBytes[offset + j], types[j], values[j])) {
         matched = false;
         break;
@@ -87,9 +90,9 @@ export function scanPreset(prompt, presetId) {
     return {
       id: patternId,
       name: pattern.name,
-      desc: pattern.desc,
+      desc: pattern.desc ?? pattern.description,
       regulation: pattern.regulation,
-      len: pattern.len,
+      len: pattern.len ?? pattern.target_len,
       ...scan,
     };
   });
@@ -116,10 +119,10 @@ export function makeDemoReceipt(scan, commitment) {
     commitment,
     provider: "0G Compute TEE",
     providerAddress: `0x${seed.slice(0, 40)}`,
-    modelId: "qwen-2.5-7b-instruct",
+    modelId: "qwen3.6-plus",
     storageRoot: `0x${seed.slice(32, 96)}`,
-    registry: "0x7d2b...a091",
-    chain: "0G Galileo Testnet",
+    registry: "0x9595BD4e6b868C64001904EeF76d838D78604B6e",
+    chain: "0G Mainnet",
     submittedAt: new Date().toISOString(),
   };
 }

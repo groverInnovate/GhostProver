@@ -105,7 +105,7 @@ async function main() {
     }>(`${base}/v1/receipts`);
     const receipt = receipts.receipts.find((item) => item.jobId === attest.job.id);
     assert(receipt, "completed proof job did not write a receipt");
-    assert(receipt.status === "local", "receipt status should be local before live 0G integration");
+    assert(receipt.status === "draft", "receipt status should be draft when onChainSubmit is disabled");
     assert(receipt.proofStatuses[0]?.status === "done", "receipt does not include done proof");
     assert(receipt.proofStatuses[0].proofSize > 0, "receipt proof size was empty");
     assert(receipt.storageRoot.startsWith("0x"), "receipt storage root was not computed");

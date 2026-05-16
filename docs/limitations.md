@@ -14,13 +14,15 @@ important for judges and future contributors.
   sequences should be used carefully in company presets.
 - **MCP requires workflow invocation.** MCP tools do not magically intercept all
   prompts; agent workflows must call GhostProver explicitly.
-- **Live 0G anchoring is deferred.** Local receipts include the right fields,
-  but live 0G Storage upload and on-chain tx hashes are a separate adapter.
+- **Live 0G anchoring is opt-in.** The default daemon mode writes draft cache
+  records for development. Mainnet submission requires `onChainSubmit: true`, a
+  deployed registry, and a funded `Compute/.env` wallet.
 
 Recommended next technical upgrades:
 
 1. Luhn validation for credit card proofs.
 2. Variable-length pattern compiler.
 3. Registry UI for custom company policies.
-4. 0G Storage + 0G Chain receipt adapter.
+4. Reuse already-generated daemon proofs inside the 0G adapter instead of
+   proving again through the Compute orchestrator.
 5. Production auth for daemon access.

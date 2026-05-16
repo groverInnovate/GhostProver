@@ -25,7 +25,7 @@ http://127.0.0.1:8787
 | `POST` | `/v1/attest` | Scan, block if risky, enqueue proofs if clean. |
 | `GET` | `/v1/jobs` | Return recent persisted job snapshots. Supports `limit` and `status`. |
 | `GET` | `/v1/jobs/:id` | Return latest persisted job snapshot. |
-| `GET` | `/v1/receipts` | Return local receipts. |
+| `GET` | `/v1/receipts` | Return receipt records from the daemon cache. |
 | `GET` | `/v1/events` | Server-Sent Events for job and receipt updates. |
 
 ## Clean Scan
@@ -98,11 +98,14 @@ Receipts include:
 - `commitment`
 - `targetHashes`
 - `proofStatuses`
-- local `storageRoot`
-- `status: "local"`
+- `storageRoot`
+- `status`: `"draft"`, `"on_chain"`, or `"on_chain_failed"`
+- optional `txHash`, `providerAddress`, and `modelId` when `onChainSubmit` is enabled
 
-Live 0G upload and on-chain submission can replace the local receipt adapter
-without changing the scan/attest API shape.
+When `.ghostprover.json` has `onChainSubmit: true`, `POST /v1/attest` still
+starts from the daemon but the completed receipt is submitted through the
+Compute 0G orchestrator. A `draft` record is only the daemon queue/debug cache;
+the compliance artifact is the `on_chain` receipt with a 0G transaction hash.
 
 ## Error Handling
 

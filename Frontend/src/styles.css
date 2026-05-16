@@ -758,6 +758,12 @@ button:disabled {
   font-weight: 800;
 }
 
+.receipt-state.failed {
+  color: var(--red);
+  background: var(--red-soft);
+  border-color: #f3b5b0;
+}
+
 .runtime-panel {
   box-shadow: none;
 }

@@ -45,7 +45,11 @@ export interface StoredReceipt {
     error?: string;
   }[];
   storageRoot: string;
-  status: "local";
+  status: "draft" | "on_chain" | "on_chain_failed";
+  txHash?: string;
+  providerAddress?: string;
+  modelId?: string;
+  onChainError?: string;
   createdAt: string;
 }
 

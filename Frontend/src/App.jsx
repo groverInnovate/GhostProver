@@ -390,9 +390,9 @@ function App() {
           </div>
           <div className="network-grid">
             <span>Registry</span>
-            <strong>{config?.registryAddress ? shortHash(config.registryAddress) : "local"}</strong>
+            <strong>{config?.registryAddress ? shortHash(config.registryAddress) : "unset"}</strong>
             <span>Submit</span>
-            <strong>{config?.onChainSubmit ? "on-chain" : "local"}</strong>
+            <strong>{config?.onChainSubmit ? "on-chain" : "draft"}</strong>
             <span>Mode</span>
             <strong>{config?.proofMode ?? "background"}</strong>
           </div>
@@ -775,7 +775,13 @@ function SubmissionProofPanel({ config, daemonOnline, latestJob, receipt, scan, 
     },
     {
       label: "Receipt",
-      detail: receipt ? shortHash(receipt.storageRoot) : "local preview root pending",
+      detail: receipt
+        ? receipt.status === "on_chain"
+          ? shortHash(receipt.txHash)
+          : receipt.status === "on_chain_failed"
+            ? "0G submission failed"
+            : "draft pending 0G"
+        : "awaiting proof",
       status: receipt ? "done" : "waiting",
       icon: Database,
     },
@@ -785,14 +791,26 @@ function SubmissionProofPanel({ config, daemonOnline, latestJob, receipt, scan, 
     <section className="surface submission-panel">
       <div className="surface-head compact">
         <div>
-          <p className="section-kicker">Submission proof</p>
-          <h2>Local compliance trail</h2>
+          <p className="section-kicker">0G receipt flow</p>
+          <h2>Compliance artifact</h2>
         </div>
         <ClipboardCheck size={20} />
       </div>
       <div className="submission-status">
         <span className={cx("status-dot", daemonOnline && "live")} />
-        <strong>{receipt ? "Receipt sealed" : scan?.clean ? "Ready to prove" : scan ? "Blocked" : "Ready"}</strong>
+        <strong>
+          {receipt?.status === "on_chain"
+            ? "Anchored on 0G"
+            : receipt?.status === "on_chain_failed"
+              ? "0G submission failed"
+              : receipt
+                ? "Draft cached"
+                : scan?.clean
+                  ? "Ready to prove"
+                  : scan
+                    ? "Blocked"
+                    : "Ready"}
+        </strong>
         <code>{config?.storage?.dir ?? ".ghostprover"}</code>
       </div>
       <div className="workflow-list">
@@ -819,7 +837,7 @@ function RuntimePanel({ config, status, jobs }) {
   const counts = status?.counts?.byStatus ?? {};
   const rows = [
     ["RPC", config?.rpcUrl ?? "pending"],
-    ["Registry", config?.registryAddress || "local receipt mode"],
+    ["Registry", config?.registryAddress || "not configured"],
     ["Proof mode", config?.proofMode ?? "background"],
     ["Policy", `${config?.policyPatternIds?.length ?? 0} patterns`],
     ["Jobs", `${jobs.length} recent / ${status?.counts?.jobs ?? 0} total`],
@@ -908,6 +926,9 @@ function ReceiptFields({ receipt, commitment, expanded = false }) {
     ? [
         ["Commitment", receipt.commitment],
         ["Storage root", receipt.storageRoot],
+        ["Tx hash", receipt.txHash],
+        ["Provider", receipt.providerAddress],
+        ["Model", receipt.modelId],
         ["Job", receipt.jobId],
         ["Status", receipt.status],
         ["Patterns", String(receipt.patternIds?.length ?? 0)],
@@ -929,9 +950,13 @@ function ReceiptFields({ receipt, commitment, expanded = false }) {
         </div>
       ))}
       {receipt && (
-        <div className="receipt-state">
+        <div className={cx("receipt-state", receipt.status === "on_chain_failed" && "failed")}>
           <Hash size={15} />
-          Batch receipt sealed
+          {receipt.status === "on_chain"
+            ? "0G receipt anchored"
+            : receipt.status === "on_chain_failed"
+              ? "0G submission failed"
+              : "Draft cached for 0G"}
         </div>
       )}
     </div>
