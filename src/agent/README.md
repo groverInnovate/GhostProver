@@ -1,5 +1,7 @@
 # GhostProver — Agent Runtime
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains the local runtime services that make GhostProver usable as a background compliance system.
 
 ## Responsibilities

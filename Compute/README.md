@@ -1,5 +1,7 @@
 # GhostProver — Compute
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains the Compute, attestation, storage, and orchestration layer for GhostProver.
 
 It bridges live or mock inference into the Zero-Knowledge proving flow and prepares the data required for archival and receipt issuance on the 0G stack.

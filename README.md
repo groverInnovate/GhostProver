@@ -4,6 +4,10 @@
 
 <h1 align="center">GhostProver — Zero-Knowledge Compliance for AI Inference</h1>
 
+<p align="center">
+  <a href="./README.md">English</a> | <a href="./README.zh-CN.md">简体中文</a>
+</p>
+
 GhostProver is a privacy-preserving compliance layer for AI workflows built around Zero-Knowledge proofs and the 0G stack.
 
 It proves that sensitive data such as Aadhaar numbers, PAN cards, API keys, credit card numbers, and other regulated identifiers were **not** present in an AI prompt, without revealing the prompt itself.

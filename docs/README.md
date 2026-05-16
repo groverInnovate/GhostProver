@@ -1,5 +1,7 @@
 # GhostProver — Documentation
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains the primary written documentation for GhostProver.
 
 It combines architecture notes, integration guides, demo material, planning context, and implementation history.

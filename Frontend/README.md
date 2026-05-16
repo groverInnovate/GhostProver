@@ -1,5 +1,7 @@
 # GhostProver — Frontend
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains the React-based operator console for GhostProver.
 
 The frontend is the human-facing interface for the daemon-backed workflow: scanning prompts, reviewing jobs, and inspecting receipts.

@@ -1,5 +1,7 @@
 # GhostProver — Circuit
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains the Noir circuit workspace used by GhostProver.
 
 It is the cryptographic core of the project: the part that proves a sensitive string or pattern does not appear in a prompt while keeping the prompt private.

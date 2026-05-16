@@ -1,5 +1,7 @@
 # GhostProver — Source
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains the main TypeScript implementation of GhostProver.
 
 It turns the Noir circuit and registry model into a developer-facing product surface: SDK, CLI, middleware, daemon, MCP bridge, and local workflow tooling.

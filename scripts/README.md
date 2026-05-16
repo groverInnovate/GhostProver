@@ -1,5 +1,7 @@
 # GhostProver — Scripts
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains repository-level helper scripts used for demos, fixture generation, verifier generation, and local contract workflows.
 
 These scripts support the project, but they are not the main public integration surface for application developers.

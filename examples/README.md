@@ -1,5 +1,7 @@
 # GhostProver — Examples
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains sample configuration assets for extending GhostProver without changing source code.
 
 ## Included Files

@@ -1,5 +1,7 @@
 # GhostProver — Chain
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains the Solidity and Foundry workspace for GhostProver's on-chain receipt layer.
 
 Its role is straightforward: verify GhostProver proofs against the generated verifier contract and emit compliance receipts on 0G Chain.

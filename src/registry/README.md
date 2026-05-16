@@ -1,5 +1,7 @@
 # GhostProver — Registry
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 This folder contains the bundled sensitive-data registry used by GhostProver.
 
 ## Purpose
