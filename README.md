@@ -19,6 +19,8 @@ The result is a verifiable compliance receipt that can be generated locally, arc
 Run the background-agent demo in three terminals:
 
 ```bash
+nvm use
+
 # terminal 1: seed a clean judge-mode audit trail
 npm run demo:judge
 
@@ -62,6 +64,9 @@ flowchart LR
   Scan -->|Clean prompt| Queue["Background proof job"]
   Queue --> Batch["Batch prover\nNoir + bb.js"]
   Batch --> Receipt["Local JSONL receipt\ncommitment + target hashes"]
+  Live["0G Compute Direct\nTEE verified inference"] --> Orchestrator["Compute orchestrator"]
+  Orchestrator --> Storage["0G Storage audit bundle"]
+  Orchestrator --> Chain["0G Chain registry receipt"]
   Receipt --> Stack0G["0G adapters\nCompute + Storage + Chain"]
   Daemon --> Console
 ```
@@ -241,7 +246,9 @@ bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol
 
 ## Local Receipt Demo
 
-The repository includes a local proof-to-contract demo flow for quickly validating the receipt path.
+This repository also includes a **demo-mode** local receipt flow. It proves the
+ZK proof can be generated and verified on-chain locally without spending
+mainnet funds.
 
 ```bash
 # terminal 1
@@ -271,11 +278,15 @@ This covers:
 
 ## 0G Mainnet Runbook
 
+For the full live path, use the 0G mainnet runbook below.
 Use Node 20+ for the current 0G Compute tooling.
 
 ### 1. Configure live Compute
 
 ```bash
+nvm use
+
+# terminal 1: configure live Compute
 cd Compute
 cp .env.example .env
 # Fill PRIVATE_KEY and mainnet configuration values

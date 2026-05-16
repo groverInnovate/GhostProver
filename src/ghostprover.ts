@@ -114,7 +114,18 @@ function proofForSolidityVerifier(proof: { proof: Uint8Array; publicInputs?: unk
   return proof.proof;
 }
 
+function assertSupportedNodeVersion() {
+  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+  if (major < 20 || (major === 20 && minor < 19)) {
+    throw new Error(
+      `GhostProver proof generation requires Node >=20.19.0; current Node is ${process.versions.node}. ` +
+      "Run `nvm use` from the repo root before starting the daemon, frontend, or Compute scripts."
+    );
+  }
+}
+
 async function createBarretenberg() {
+  assertSupportedNodeVersion();
   return Barretenberg.new({
     backend: BackendType.Wasm,
     threads: 1,
