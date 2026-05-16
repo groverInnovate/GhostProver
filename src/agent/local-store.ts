@@ -85,10 +85,17 @@ export class LocalStore {
   }
 
   listReceipts(): StoredReceipt[] {
-    return readJsonl<StoredReceipt>(this.receiptsPath).sort((a, b) =>
+    return readJsonl<StoredReceipt>(this.receiptsPath).map(normalizeReceipt).sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt)
     );
   }
+}
+
+function normalizeReceipt(receipt: StoredReceipt): StoredReceipt {
+  const legacy = receipt as Omit<StoredReceipt, "status"> & {
+    status: "local" | StoredReceipt["status"];
+  };
+  return legacy.status === "local" ? { ...receipt, status: "draft" } : receipt;
 }
 
 function readJsonl<T>(filePath: string): T[] {
