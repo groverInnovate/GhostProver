@@ -403,7 +403,7 @@ function App() {
         <header className="topbar">
           <div>
             <p className="eyebrow">Operator workspace</p>
-            <h1>Compliance control room</h1>
+            <h1>Build, Scan, And Prove</h1>
             <p className={cx("daemon-state", daemonOnline ? "online" : "offline")}>
               {daemonOnline
                 ? `${networkLabel(config?.rpcUrl)} policy active at ${API_BASE}`
