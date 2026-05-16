@@ -45,8 +45,8 @@ export const DEFAULT_CONFIG: GhostProverConfig = {
   proofMode: "background",
   concurrency: 1,
   daemon: {
-    host: "127.0.0.1",
-    port: 8787,
+    host: "0.0.0.0",
+    port: process.env.PORT ? Number(process.env.PORT) : 8787,
   },
   storage: {
     dir: ".ghostprover",
