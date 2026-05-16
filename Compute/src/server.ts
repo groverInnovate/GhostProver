@@ -27,6 +27,7 @@ import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { ethers } from 'ethers';
 import { orchestrate } from './orchestrator.js';
@@ -83,6 +84,82 @@ function extractAssistantResponse(log: Record<string, unknown>): string {
     }
   }
   return typeof body === 'string' ? body : '';
+}
+
+function sha256Hex(value: string): string {
+  return `0x${crypto.createHash('sha256').update(value, 'utf8').digest('hex')}`;
+}
+
+function walletAuthorizationMessage(address: string, promptHash: string, patternIds: string[], signedAt: string): string {
+  return [
+    'GhostProver Live 0G Receipt Authorization',
+    '',
+    `Wallet: ${address}`,
+    `Prompt SHA-256: ${promptHash}`,
+    `Proof targets: ${[...patternIds].sort().join(',')}`,
+    `Timestamp: ${signedAt}`,
+    'Network: 0G Mainnet',
+  ].join('\n');
+}
+
+function normalizePatternIds(patterns: unknown): string[] {
+  if (!Array.isArray(patterns)) return [];
+  return [...new Set(patterns.filter((item): item is string => typeof item === 'string' && item.trim().length > 0))];
+}
+
+function verifyWalletAuthorization(input: {
+  prompt: string;
+  patternIds: string[];
+  walletAddress?: unknown;
+  walletSignature?: unknown;
+  walletMessage?: unknown;
+  walletSignedAt?: unknown;
+  promptHash?: unknown;
+}): { walletAddress: string; walletSignature: string; walletMessage: string; walletSignedAt: string; promptHash: string } {
+  const { prompt, patternIds } = input;
+  if (!patternIds.length) throw new Error('at least one proof target is required');
+  if (typeof input.walletAddress !== 'string' || !ethers.isAddress(input.walletAddress)) {
+    throw new Error('valid walletAddress is required');
+  }
+  if (typeof input.walletSignature !== 'string' || !input.walletSignature.startsWith('0x')) {
+    throw new Error('walletSignature is required');
+  }
+  if (typeof input.walletMessage !== 'string') throw new Error('walletMessage is required');
+  if (typeof input.walletSignedAt !== 'string') throw new Error('walletSignedAt is required');
+  if (typeof input.promptHash !== 'string') throw new Error('promptHash is required');
+
+  const expectedPromptHash = sha256Hex(prompt);
+  if (input.promptHash.toLowerCase() !== expectedPromptHash.toLowerCase()) {
+    throw new Error('wallet authorization prompt hash does not match submitted prompt');
+  }
+
+  const signedAtMs = Date.parse(input.walletSignedAt);
+  if (!Number.isFinite(signedAtMs)) throw new Error('walletSignedAt must be an ISO timestamp');
+  const ageMs = Math.abs(Date.now() - signedAtMs);
+  if (ageMs > 10 * 60 * 1000) throw new Error('wallet authorization has expired');
+
+  const expectedMessage = walletAuthorizationMessage(
+    input.walletAddress,
+    expectedPromptHash,
+    patternIds,
+    input.walletSignedAt
+  );
+  if (input.walletMessage !== expectedMessage) {
+    throw new Error('wallet authorization message does not match prompt and proof targets');
+  }
+
+  const recovered = ethers.verifyMessage(input.walletMessage, input.walletSignature);
+  if (recovered.toLowerCase() !== input.walletAddress.toLowerCase()) {
+    throw new Error('wallet signature does not match walletAddress');
+  }
+
+  return {
+    walletAddress: ethers.getAddress(input.walletAddress),
+    walletSignature: input.walletSignature,
+    walletMessage: input.walletMessage,
+    walletSignedAt: input.walletSignedAt,
+    promptHash: expectedPromptHash,
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -282,13 +359,41 @@ app.post('/api/prove/stream', async (req, res) => {
 // POST /api/live-receipt/stream — live 0G inference, attested proof, storage, chain
 // -----------------------------------------------------------------------------
 app.post('/api/live-receipt/stream', async (req, res) => {
-  const { prompt, patterns, preset, skipStorage, skipOnChain, allowUnverified } = req.body ?? {};
+  const {
+    prompt,
+    patterns,
+    preset,
+    skipStorage,
+    skipOnChain,
+    allowUnverified,
+    walletAddress,
+    walletSignature,
+    walletMessage,
+    walletSignedAt,
+    promptHash,
+  } = req.body ?? {};
   if (!prompt || typeof prompt !== 'string') {
     res.status(400).json({ error: 'prompt is required' });
     return;
   }
   if (!preset && !Array.isArray(patterns)) {
     res.status(400).json({ error: 'preset or patterns is required' });
+    return;
+  }
+  const patternIds = normalizePatternIds(patterns);
+  let walletAuth: ReturnType<typeof verifyWalletAuthorization>;
+  try {
+    walletAuth = verifyWalletAuthorization({
+      prompt,
+      patternIds,
+      walletAddress,
+      walletSignature,
+      walletMessage,
+      walletSignedAt,
+      promptHash,
+    });
+  } catch (err) {
+    res.status(401).json({ error: (err as Error).message ?? String(err) });
     return;
   }
 
@@ -359,12 +464,23 @@ app.post('/api/live-receipt/stream', async (req, res) => {
       throw new Error('0G inference completed but did not print a saved sample path');
     }
     const inferenceLog = JSON.parse(fs.readFileSync(samplePath, 'utf8')) as Record<string, unknown>;
+    inferenceLog.walletAuthorization = {
+      walletAddress: walletAuth.walletAddress,
+      walletSignature: walletAuth.walletSignature,
+      walletMessage: walletAuth.walletMessage,
+      walletSignedAt: walletAuth.walletSignedAt,
+      promptHash: walletAuth.promptHash,
+      proofTargets: patternIds,
+      verifiedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(samplePath, JSON.stringify(inferenceLog, null, 2));
     send('sample', {
       samplePath,
       provider: inferenceLog.provider ?? null,
       model: inferenceLog.model ?? null,
       teeVerified: inferenceLog.teeVerified ?? null,
       response: extractAssistantResponse(inferenceLog),
+      walletAddress: walletAuth.walletAddress,
     });
 
     progress('proof', 48, 'generating ZK proof from attested request body');
@@ -400,7 +516,7 @@ app.post('/api/live-receipt/stream', async (req, res) => {
       const result = await orchestrate({
         samplePath,
         preset,
-        patternIds: Array.isArray(patterns) ? patterns : undefined,
+        patternIds: patternIds.length ? patternIds : undefined,
         skipStorage: Boolean(skipStorage),
         skipOnChain: Boolean(skipOnChain),
         allowUnverified: Boolean(allowUnverified),
@@ -411,7 +527,13 @@ app.post('/api/live-receipt/stream', async (req, res) => {
       job.result = result;
       job.finishedAt = Date.now();
       send('progress', { stage: 'complete', progress: 100, msg: 'live 0G receipt complete' });
-      send('result', { ...result, samplePath, response: extractAssistantResponse(inferenceLog) });
+      send('result', {
+        ...result,
+        samplePath,
+        response: extractAssistantResponse(inferenceLog),
+        walletAddress: walletAuth.walletAddress,
+        walletPromptHash: walletAuth.promptHash,
+      });
     } finally {
       console.log = origLog;
       console.warn = origWarn;

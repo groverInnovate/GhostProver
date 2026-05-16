@@ -15,7 +15,6 @@ import {
   KeyRound,
   Loader2,
   LockKeyhole,
-  Play,
   RefreshCw,
   Search,
   Server,
@@ -27,7 +26,7 @@ import {
 import React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { CLASS_LABELS, REGISTRY } from "./registry.js";
-import { bytesOf } from "./scanner.js";
+import { bytesOf, digestHex, scanSinglePattern } from "./scanner.js";
 
 const API_BASE = import.meta.env.VITE_GHOSTPROVER_API ?? "http://127.0.0.1:8787";
 const COMPUTE_API_BASE = import.meta.env.VITE_GHOSTPROVER_COMPUTE_API ?? "http://127.0.0.1:8790";
@@ -63,7 +62,7 @@ function formatDate(value) {
 function networkLabel(rpcUrl = "") {
   if (rpcUrl.includes("evmrpc.0g.ai")) return "0G Mainnet";
   if (rpcUrl.includes("galileo")) return "0G Galileo Testnet";
-  return rpcUrl ? "Custom RPC" : "Local daemon";
+  return rpcUrl ? "Custom RPC" : "0G Mainnet";
 }
 
 async function apiErrorMessage(response, fallback) {
@@ -150,6 +149,31 @@ function adaptScan(response, registry) {
   };
 }
 
+function scanLocally(prompt, presetId, patternIds, registry) {
+  const promptBytes = bytesOf(prompt);
+  const results = patternIds.map((id) => {
+    const pattern = registry.patterns[id];
+    const scan = scanSinglePattern(promptBytes, pattern);
+    return {
+      id,
+      name: pattern.name,
+      offset: scan.offset,
+      matchOffset: scan.offset,
+      matched: scan.matched,
+      desc: pattern.description,
+      len: pattern.target_len,
+    };
+  });
+
+  return {
+    presetId,
+    presetName: registry.presets[presetId]?.name ?? presetId,
+    byteLength: promptBytes.length,
+    clean: results.every((result) => !result.matched),
+    results,
+  };
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState("console");
   const [selectedPreset, setSelectedPreset] = useState("saas");
@@ -169,8 +193,15 @@ function App() {
   const [registryFilter, setRegistryFilter] = useState("all");
   const [registrySearch, setRegistrySearch] = useState("");
   const [liveRun, setLiveRun] = useState(initialLiveRun);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [walletError, setWalletError] = useState("");
+  const [selectedPatternIds, setSelectedPatternIds] = useState(["tech.aws_key"]);
 
   const preset = presetView(selectedPreset, registry.presets[selectedPreset] ?? REGISTRY.presets.saas);
+  const activePatternIds = useMemo(() => {
+    const presetPatterns = preset.patterns ?? [];
+    return selectedPatternIds.filter((id) => presetPatterns.includes(id));
+  }, [preset.patterns, selectedPatternIds]);
   const promptBytes = bytesOf(prompt).length;
   const maxPromptBytes = config?.maxPromptBytes ?? status?.maxPromptBytes ?? 512;
   const promptTooLarge = promptBytes > maxPromptBytes;
@@ -205,9 +236,14 @@ function App() {
         setConfig(nextConfig);
         setJobs(nextJobs);
         setRegistry(nextRegistry);
-        setSelectedPreset(nextConfig.preset ?? "saas");
+        const nextPreset = nextConfig.preset ?? "saas";
+        setSelectedPreset(nextPreset);
+        setSelectedPatternIds((current) => {
+          const nextPatterns = nextRegistry.presets[nextPreset]?.patterns ?? [];
+          const retained = current.filter((id) => nextPatterns.includes(id));
+          return retained.length ? retained : [nextPatterns[0] ?? "tech.aws_key"].filter(Boolean);
+        });
         setDaemonOnline(true);
-        setApiError("");
         setLatestJob(nextStatus.latestJob ?? nextJobs[0] ?? null);
         setReceipt(nextStatus.latestReceipt ?? receipts.receipts[0] ?? null);
         setHistory(
@@ -265,7 +301,6 @@ function App() {
         });
       } catch {
         setDaemonOnline(false);
-        setApiError("Daemon is offline. Start the local agent with npm run daemon.");
       }
     }
 
@@ -294,12 +329,12 @@ function App() {
   }, [registry, registryFilter, registrySearch]);
 
   async function runScan() {
-    if (!daemonOnline) {
-      setApiError("Daemon is offline. Start the local agent with npm run daemon.");
-      return;
-    }
     if (promptTooLarge) {
       setApiError(`Prompt is ${promptBytes} bytes; GhostProver accepts ${maxPromptBytes} bytes.`);
+      return;
+    }
+    if (activePatternIds.length === 0) {
+      setApiError("Select at least one proof target.");
       return;
     }
     let response;
@@ -307,11 +342,22 @@ function App() {
       response = await fetch(`${API_BASE}/v1/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, preset: selectedPreset }),
+        body: JSON.stringify({ prompt, preset: selectedPreset, patterns: activePatternIds }),
       });
     } catch {
       setDaemonOnline(false);
-      setApiError("Scan failed because the daemon did not respond.");
+      const nextScan = scanLocally(prompt, selectedPreset, activePatternIds, registry);
+      setApiError("");
+      setScan(nextScan);
+      setCommitment("");
+      setReceipt(null);
+      setProofRun(
+        nextScan.results.map((result) => ({
+          ...result,
+          status: result.matched ? "blocked" : "queued",
+          proofSize: result.matched ? 0 : 10560,
+        }))
+      );
       return;
     }
     if (!response.ok) {
@@ -380,13 +426,23 @@ function App() {
       return;
     }
 
-    const demoPattern = scan.results.find((item) => item.id === "tech.aws_key")?.id ?? scan.results[0]?.id;
-    if (!demoPattern) {
-      setApiError("No policy pattern is available for the live receipt run.");
+    const proofTargets = activePatternIds.length ? activePatternIds : scan.results.map((item) => item.id);
+    if (!proofTargets.length) {
+      setApiError("Select at least one proof target for the live receipt run.");
       return;
     }
 
     setApiError("");
+    setWalletError("");
+
+    let authorization;
+    try {
+      authorization = await signLiveReceiptAuthorization(proofTargets);
+    } catch (err) {
+      setWalletError(err.message ?? "Wallet authorization failed.");
+      return;
+    }
+
     setLiveRun({ ...initialLiveRun(), running: true, stage: "queued", logs: [] });
 
     let response;
@@ -394,7 +450,15 @@ function App() {
       response = await fetch(`${COMPUTE_API_BASE}/api/live-receipt/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, patterns: [demoPattern] }),
+        body: JSON.stringify({
+          prompt,
+          patterns: proofTargets,
+          walletAddress: authorization.walletAddress,
+          walletSignature: authorization.walletSignature,
+          walletMessage: authorization.walletMessage,
+          walletSignedAt: authorization.walletSignedAt,
+          promptHash: authorization.promptHash,
+        }),
       });
     } catch {
       setLiveRun((current) => ({
@@ -450,23 +514,22 @@ function App() {
               id: parsed.data.txHash,
               jobId: parsed.data.samplePath,
               preset: selectedPreset,
-              patternIds: [demoPattern],
+              patternIds: proofTargets,
               commitment: parsed.data.commitment,
               targetHashes: parsed.data.targetHashes ?? [],
-              proofStatuses: [
-                {
-                  patternId: demoPattern,
-                  patternName: registry.patterns[demoPattern]?.name ?? demoPattern,
-                  status: "done",
-                  proofSize: 10560,
-                  proofTimeMs: parsed.data.proofTimeMs,
-                },
-              ],
+              proofStatuses: proofTargets.map((patternId) => ({
+                patternId,
+                patternName: registry.patterns[patternId]?.name ?? patternId,
+                status: "done",
+                proofSize: 10560,
+                proofTimeMs: parsed.data.proofTimeMs,
+              })),
               storageRoot: parsed.data.storageRoot,
               status: parsed.data.txHash ? "on_chain" : "on_chain_failed",
               txHash: parsed.data.txHash,
               providerAddress: parsed.data.provider,
               modelId: parsed.data.model,
+              walletAddress: parsed.data.walletAddress ?? authorization.walletAddress,
               createdAt: new Date().toISOString(),
             };
             setReceipt(nextReceipt);
@@ -515,6 +578,62 @@ function App() {
     setCommitment("");
   }
 
+  async function connectWallet() {
+    setWalletError("");
+    try {
+      await ensureWalletAddress();
+    } catch (err) {
+      setWalletError(err.message ?? "Wallet connection failed.");
+    }
+  }
+
+  async function ensureWalletAddress() {
+    const ethereum = window.ethereum;
+    if (!ethereum?.request) {
+      throw new Error("MetaMask is not available in this browser.");
+    }
+    const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+    const nextAddress = accounts?.[0] ?? "";
+    if (!nextAddress) throw new Error("No wallet account was returned by MetaMask.");
+    setWalletAddress(nextAddress);
+    return nextAddress;
+  }
+
+  function walletAuthorizationMessage(address, promptHash, patternIds, signedAt) {
+    return [
+      "GhostProver Live 0G Receipt Authorization",
+      "",
+      `Wallet: ${address}`,
+      `Prompt SHA-256: ${promptHash}`,
+      `Proof targets: ${[...patternIds].sort().join(",")}`,
+      `Timestamp: ${signedAt}`,
+      "Network: 0G Mainnet",
+    ].join("\n");
+  }
+
+  async function signLiveReceiptAuthorization(patternIds) {
+    const address = walletAddress || await ensureWalletAddress();
+    const promptHash = await digestHex(prompt);
+    const walletSignedAt = new Date().toISOString();
+    const walletMessage = walletAuthorizationMessage(address, promptHash, patternIds, walletSignedAt);
+    const walletSignature = await window.ethereum.request({
+      method: "personal_sign",
+      params: [walletMessage, address],
+    });
+    return { walletAddress: address, walletSignature, walletMessage, walletSignedAt, promptHash };
+  }
+
+  function togglePatternTarget(patternId) {
+    setSelectedPatternIds((current) => {
+      if (current.includes(patternId)) {
+        const next = current.filter((id) => id !== patternId);
+        return next.length ? next : current;
+      }
+      return [...current, patternId];
+    });
+    resetRun();
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -555,12 +674,16 @@ function App() {
           <div className="network-grid">
             <span>Registry</span>
             <strong>{config?.registryAddress ? shortHash(config.registryAddress) : "unset"}</strong>
-            <span>Submit</span>
-            <strong>{config?.onChainSubmit ? "on-chain" : "draft"}</strong>
-            <span>Mode</span>
-            <strong>{config?.proofMode ?? "background"}</strong>
+            <span>Receipts</span>
+            <strong>0G Storage + Chain</strong>
+            <span>Wallet</span>
+            <strong>{walletAddress ? shortHash(walletAddress) : "not connected"}</strong>
           </div>
         </div>
+        <button className="wallet-button" type="button" onClick={connectWallet}>
+          <KeyRound size={15} />
+          {walletAddress ? shortHash(walletAddress) : "Connect wallet"}
+        </button>
       </aside>
 
       <main className="workspace">
@@ -568,11 +691,6 @@ function App() {
           <div>
             <p className="eyebrow">Operator workspace</p>
             <h1>Build, Scan, And Prove</h1>
-            <p className={cx("daemon-state", daemonOnline ? "online" : "offline")}>
-              {daemonOnline
-                ? `${networkLabel(config?.rpcUrl)} policy active at ${API_BASE}`
-                : `Daemon offline. Start it with: npm run cli -- daemon`}
-            </p>
           </div>
           <div className="topbar-actions">
             <button className="icon-button" onClick={resetRun} type="button" title="Reset run">
@@ -580,15 +698,6 @@ function App() {
             </button>
             <button
               className="primary-action"
-              onClick={runProofs}
-              disabled={!scan?.clean || !daemonOnline || promptTooLarge}
-              type="button"
-            >
-              <Play size={17} />
-              Generate ZK proof
-            </button>
-            <button
-              className="primary-action live"
               onClick={runLiveReceipt}
               disabled={!scan?.clean || liveRun.running || promptTooLarge}
               type="button"
@@ -606,15 +715,14 @@ function App() {
               <AlertTriangle size={17} />
               <span>{apiError}</span>
             </div>
-            {!daemonOnline && (
-              <code className="error-code-snippet" onClick={(e) => {
-                navigator.clipboard.writeText("npm run daemon");
-                e.target.innerText = "Copied!";
-                setTimeout(() => e.target.innerText = "npm run daemon", 2000);
-              }} title="Click to copy">
-                npm run daemon
-              </code>
-            )}
+          </div>
+        )}
+        {walletError && (
+          <div className="error-banner" role="status">
+            <div className="error-banner-content">
+              <AlertTriangle size={17} />
+              <span>{walletError}</span>
+            </div>
           </div>
         )}
 
@@ -632,25 +740,49 @@ function App() {
                   </div>
                 </div>
 
-                <div className="preset-strip">
-                  {Object.entries(registry.presets).map(([id, rawItem]) => {
-                    const item = presetView(id, rawItem);
-                    return (
-                    <button
-                      key={id}
-                      className={cx("preset-chip", selectedPreset === id && "selected")}
-                      style={{ "--preset": item.accent }}
-                      onClick={() => {
-                        setSelectedPreset(id);
+                <div className="policy-controls">
+                  <label className="select-control policy-select">
+                    <span>Preset</span>
+                    <select
+                      value={selectedPreset}
+                      onChange={(event) => {
+                        const nextPreset = event.target.value;
+                        setSelectedPreset(nextPreset);
+                        setSelectedPatternIds([registry.presets[nextPreset]?.patterns?.[0] ?? ""].filter(Boolean));
                         resetRun();
                       }}
-                      type="button"
                     >
-                      <span>{item.short}</span>
-                      <small>{item.patterns.length}</small>
-                    </button>
-                    );
-                  })}
+                      {Object.entries(registry.presets).map(([id, item]) => (
+                        <option key={id} value={id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={15} />
+                  </label>
+                  <div className="target-picker">
+                    <span>Proof targets</span>
+                    <details>
+                      <summary>
+                        <strong>{activePatternIds.length}</strong>
+                        selected
+                        <ChevronDown size={15} />
+                      </summary>
+                      <div className="target-options">
+                        {(preset.patterns ?? []).map((id) => (
+                          <label key={id} className="target-option">
+                            <input
+                              type="checkbox"
+                              checked={activePatternIds.includes(id)}
+                              onChange={() => togglePatternTarget(id)}
+                            />
+                            <span>{registry.patterns[id]?.name ?? id}</span>
+                            <code>{id}</code>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
                 </div>
 
                 <textarea
@@ -687,7 +819,7 @@ function App() {
                   <button
                     className="scan-button"
                     type="button"
-                    disabled={promptBytes === 0 || !daemonOnline || promptTooLarge}
+                    disabled={promptBytes === 0 || promptTooLarge || activePatternIds.length === 0}
                     onClick={runScan}
                   >
                     <FileSearch size={18} />
@@ -711,7 +843,7 @@ function App() {
                 </div>
 
                 <div className="result-list">
-                  {(scan?.results ?? preset.patterns.map((id) => ({ id, ...patternView(registry.patterns[id]) }))).map(
+                  {(scan?.results ?? activePatternIds.map((id) => ({ id, ...patternView(registry.patterns[id]) }))).map(
                     (item) => (
                       <div
                         key={item.id}
@@ -745,57 +877,11 @@ function App() {
             </div>
 
             <aside className="side-column">
-              <SubmissionProofPanel
-                config={config}
-                daemonOnline={daemonOnline}
-                latestJob={latestJob}
-                receipt={receipt}
-                scan={scan}
-                selectedPreset={selectedPreset}
-              />
-
               <LiveReceiptPanel
                 liveRun={liveRun}
                 computeApiBase={COMPUTE_API_BASE}
                 onVerify={verifyLiveReceipt}
               />
-
-              <RuntimePanel config={config} status={status} jobs={jobs} />
-
-              <MetricGrid
-                cleanCount={cleanCount}
-                blockedCount={blockedCount}
-                proofRun={proofRun}
-                selectedCount={preset.patterns.length}
-              />
-
-              <section className="surface">
-                <div className="surface-head compact">
-                  <div>
-                    <p className="section-kicker">Proof run</p>
-                    <h2>Batch prover</h2>
-                  </div>
-                  <CloudCog size={20} />
-                </div>
-                <div className="proof-list">
-                  {(proofRun.length ? proofRun : preset.patterns.map((id) => ({ id, status: "idle" }))).map(
-                    (item) => (
-                      <ProofRow key={item.id} item={item} />
-                    )
-                  )}
-                </div>
-              </section>
-
-              <section className="surface receipt-preview">
-                <div className="surface-head compact">
-                  <div>
-                    <p className="section-kicker">Receipt</p>
-                    <h2>0G anchor</h2>
-                  </div>
-                  <Database size={20} />
-                </div>
-                <ReceiptFields receipt={receipt} commitment={commitment} />
-              </section>
             </aside>
           </section>
         )}
@@ -805,7 +891,7 @@ function App() {
             <div className="surface-head">
               <div>
                 <p className="section-kicker">Registry</p>
-                <h2>Pattern catalog</h2>
+                <h2>Policy catalog</h2>
               </div>
               <div className="registry-tools">
                 <label className="search-control">
@@ -834,6 +920,8 @@ function App() {
               </div>
             </div>
 
+            <CustomRegistryPanel />
+
             <div className="registry-table">
               {registryItems.map((pattern) => (
                 <article key={pattern.id} className="pattern-card">
@@ -844,15 +932,18 @@ function App() {
                     </div>
                     <span>{pattern.len}</span>
                   </div>
-                  <div className="pattern-classes">
-                    {pattern.types.slice(0, Math.min(pattern.types.length, 14)).map((type, index) => (
-                      <span key={`${pattern.id}-${index}`}>{CLASS_LABELS[type]}</span>
-                    ))}
-                  </div>
                   <div className="pattern-tags">
                     <code>{pattern.id}</code>
                     <span>{pattern.regulation || "internal"}</span>
                   </div>
+                  <details className="schema-details">
+                    <summary>Schema</summary>
+                    <div className="pattern-classes compact">
+                      {pattern.types.slice(0, Math.min(pattern.types.length, 18)).map((type, index) => (
+                        <span key={`${pattern.id}-${index}`}>{CLASS_LABELS[type]}</span>
+                      ))}
+                    </div>
+                  </details>
                 </article>
               ))}
             </div>
@@ -898,7 +989,7 @@ function App() {
                 </div>
                 <BadgeCheck size={22} />
               </div>
-              <ReceiptFields receipt={receipt} commitment={commitment} expanded />
+              <ReceiptFields receipt={receipt} commitment={commitment} expanded compactDetails />
             </section>
 
             <section className="surface">
@@ -1094,6 +1185,10 @@ function LiveReceiptPanel({ liveRun, computeApiBase, onVerify }) {
           <code>{result?.model ?? sample?.model ?? "pending"}</code>
         </div>
         <div className="receipt-field">
+          <span>Wallet</span>
+          <code>{shortHash(result?.walletAddress ?? sample?.walletAddress)}</code>
+        </div>
+        <div className="receipt-field">
           <span>Storage root</span>
           <code>{shortHash(result?.storageRoot)}</code>
         </div>
@@ -1134,6 +1229,55 @@ function LiveReceiptPanel({ liveRun, computeApiBase, onVerify }) {
           {liveRun.error}
         </div>
       )}
+    </section>
+  );
+}
+
+function CustomRegistryPanel() {
+  const customPattern = `{
+  "version": "company",
+  "patterns": {
+    "company.customer_id": {
+      "id": "company.customer_id",
+      "name": "Customer ID",
+      "description": "Internal customer identifier",
+      "target_len": 12,
+      "pattern_types": ["UPPER", "UPPER", "DIGIT", "DIGIT", "DIGIT", "DIGIT", "DIGIT", "DIGIT", "DIGIT", "DIGIT", "DIGIT", "DIGIT"],
+      "industry": ["internal"],
+      "regulation": "Company policy"
+    }
+  },
+  "presets": {
+    "company": {
+      "name": "Company Policy",
+      "patterns": ["company.customer_id"]
+    }
+  }
+}`;
+  const configSnippet = `{
+  "preset": "company",
+  "customRegistryPath": "examples/custom-registry.json",
+  "blockOnDetection": true
+}`;
+
+  return (
+    <section className="custom-registry-panel">
+      <div>
+        <p className="section-kicker">Custom registry</p>
+        <h3>Bring your own sensitive-data policy</h3>
+        <span>
+          Custom registries are supported through JSON files referenced by
+          <code>.ghostprover.json</code>. The daemon merges them with built-ins and validates the schema.
+        </span>
+      </div>
+      <details>
+        <summary>Create registry JSON</summary>
+        <pre>{customPattern}</pre>
+      </details>
+      <details>
+        <summary>Enable in config</summary>
+        <pre>{configSnippet}</pre>
+      </details>
     </section>
   );
 }
@@ -1226,7 +1370,7 @@ function ProofRow({ item }) {
   );
 }
 
-function ReceiptFields({ receipt, commitment, expanded = false }) {
+function ReceiptFields({ receipt, commitment, expanded = false, compactDetails = false }) {
   const rows = receipt
     ? [
         ["Commitment", receipt.commitment],
@@ -1239,12 +1383,37 @@ function ReceiptFields({ receipt, commitment, expanded = false }) {
         ["Patterns", String(receipt.patternIds?.length ?? 0)],
         ["Created", receipt.createdAt],
       ]
+        .filter(([, value]) => Boolean(value))
     : [
         ["Commitment", commitment || "pending"],
         ["Storage root", "pending"],
         ["Provider", "pending"],
         ["Model", "pending"],
       ];
+
+  if (compactDetails && receipt) {
+    const primary = rows.filter(([label]) => ["Commitment", "Storage root", "Tx hash", "Status"].includes(label));
+    const secondary = rows.filter(([label]) => !["Commitment", "Storage root", "Tx hash", "Status"].includes(label));
+    return (
+      <div className={cx("receipt-fields", expanded && "expanded")}>
+        {primary.map(([label, value]) => (
+          <div className="receipt-field" key={label}>
+            <span>{label}</span>
+            <code>{expanded ? value : shortHash(value)}</code>
+          </div>
+        ))}
+        <details className="receipt-details">
+          <summary>More receipt fields</summary>
+          {secondary.map(([label, value]) => (
+            <div className="receipt-field" key={label}>
+              <span>{label}</span>
+              <code>{value}</code>
+            </div>
+          ))}
+        </details>
+      </div>
+    );
+  }
 
   return (
     <div className={cx("receipt-fields", expanded && "expanded")}>

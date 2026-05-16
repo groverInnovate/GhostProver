@@ -109,11 +109,19 @@ from a separate user-supplied prompt string. If the top-level prompt is edited
 to differ from the attested request body, orchestration fails before storage or
 chain submission.
 
+The live frontend also requires a wallet signature before the Compute server
+starts the receipt pipeline. That signature authorizes the exact prompt
+SHA-256 hash, selected proof targets, wallet address, and timestamp. The server
+verifies the signature and writes the authorization into the audit bundle, then
+uses the configured relayer key for 0G Compute, 0G Storage, and registry
+submission.
+
 That means a user cannot generate a proof for a clean prompt and then attach it
 to a different risky inference request. The on-chain receipt binds:
 
 - the prompt commitment generated from the verified inference request body
 - the sensitive-data pattern hashes checked by the ZK proof
+- the wallet authorization for that exact prompt hash and target list
 - the 0G Compute provider and model
 - the 0G Storage root for the audit bundle
 - the 0G Chain transaction emitted by `GhostProverRegistry`
@@ -506,7 +514,8 @@ If the SDK cannot auto-detect chain contracts, set the relevant addresses manual
 
 ### Step 4 — Use the React console against 0G mainnet
 
-The frontend talks to the local daemon. To connect the UI to the live 0G pipeline:
+The frontend uses two backend surfaces: the policy API for scans and the
+Compute API for live 0G receipts. To connect the UI to the live 0G pipeline:
 
 ```bash
 # From the repo root
@@ -522,15 +531,19 @@ cd Compute && npm run server
 cd Frontend && npm run dev
 ```
 
-The daemon runs the local policy/MCP API on `8787`; the Compute server streams
-the live 0G receipt pipeline on `8790`. In the frontend, use **Run scan** first,
-then **Run live 0G receipt** to execute:
+The policy API runs on `8787`; the Compute server streams the live 0G receipt
+pipeline on `8790`. In the frontend, connect MetaMask, select one or more proof
+targets, use **Run scan** first, then **Run live 0G receipt** to execute:
 
 ```text
 scan → 0G inference → TEE/response verification → ZK proof → 0G Storage → 0G Chain → verify receipt
 ```
 
-With `onChainSubmit: true` in `.ghostprover.json`, every clean attestation that passes the daemon's `/v1/attest` endpoint can also be routed through the Compute orchestrator and settled on 0G Chain. The receipt — including `txHash`, provider, model, and 0G Storage root — is appended to `.ghostprover/receipts.jsonl`.
+With `onChainSubmit: true` in `.ghostprover.json`, every clean attestation that
+passes the daemon's `/v1/attest` endpoint can also be routed through the Compute
+orchestrator and settled on 0G Chain. The receipt — including `txHash`, provider,
+model, wallet authorization, and 0G Storage root — is appended to
+`.ghostprover/receipts.jsonl`.
 
 ## Repository Layout
 
