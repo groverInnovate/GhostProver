@@ -9,6 +9,8 @@ GhostProver v2 proves that sensitive data (like Aadhar numbers, PAN cards, AWS A
 Run the background-agent demo in three terminals:
 
 ```bash
+nvm use
+
 # terminal 1: seed a clean judge-mode audit trail
 npm run demo:judge
 
@@ -48,7 +50,9 @@ flowchart LR
   Scan -->|Clean prompt| Queue["Background proof job"]
   Queue --> Batch["Batch prover\nNoir + bb.js"]
   Batch --> Receipt["Local JSONL receipt\nstorageRoot preview"]
-  Receipt --> Future0G["Future adapter\n0G Storage + Chain"]
+  Live["0G Compute Direct\nTEE verified inference"] --> Orchestrator["Compute orchestrator"]
+  Orchestrator --> Storage["0G Storage audit bundle"]
+  Orchestrator --> Chain["0G Chain registry receipt"]
   Daemon --> Console
 ```
 
@@ -132,9 +136,9 @@ bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol
 
 ## Local receipt demo
 
-This repository now includes a **demo-mode** local receipt flow. It proves the
-ZK proof can be generated and verified on-chain locally, but it is **not** full
-0G integration yet.
+This repository also includes a **demo-mode** local receipt flow. It proves the
+ZK proof can be generated and verified on-chain locally without spending
+mainnet funds.
 
 ```bash
 # terminal 1
@@ -172,14 +176,15 @@ The local receipt demo is intentionally partial:
 - The chain target is local Anvil, not 0G Chain.
 - The verifier artifact is reused from the checked-in Noir output.
 
-The missing integration step is the eventual binding between the proof
-commitment and a real TEE-attested request identity from 0G Compute.
+For the full live path, use the 0G mainnet runbook below.
 
 ## 0G mainnet runbook
 
 Use Node 20+ for the current 0G Compute SDKs.
 
 ```bash
+nvm use
+
 # terminal 1: configure live Compute
 cd Compute
 cp .env.example .env

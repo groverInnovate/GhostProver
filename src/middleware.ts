@@ -20,6 +20,9 @@ import { scanPrompt, generateBatchProofs, type BatchProofOutput } from "./batch-
 import { computeCommitment } from "./ghostprover.js";
 import { loadRegistry, type PatternRegistry } from "./registry/index.js";
 import type { IncomingMessage, ServerResponse } from "http";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
 
 // ---------------------------------------------------------------------------
 // Types
