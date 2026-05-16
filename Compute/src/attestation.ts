@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { getBrokerConfig, initBroker, logBrokerContext, pickService } from './broker.js';
+import { getBrokerConfig, getServiceModel, getServiceProvider, initBroker, logBrokerContext, pickService } from './broker.js';
 
 async function main() {
   const ctx = await initBroker();
@@ -12,8 +12,8 @@ async function main() {
   await logBrokerContext(ctx);
   console.log('[config]', getBrokerConfig());
   const service = await pickService(broker);
-  const providerAddress: string = service.provider;
-  console.log('[service]', { provider: providerAddress, model: service.model });
+  const providerAddress = getServiceProvider(service);
+  console.log('[service]', { provider: providerAddress, model: getServiceModel(service) });
 
   const outDir = path.resolve('reports');
   fs.mkdirSync(outDir, { recursive: true });
@@ -32,9 +32,9 @@ async function main() {
 
   const result = {
     provider: providerAddress,
-    model: service.model,
-    serviceType: service.serviceType,
-    url: service.url,
+    model: getServiceModel(service),
+    serviceType: service.serviceType ?? service.service_type,
+    url: service.url ?? service.endpoint,
     verifiability: service.verifiability,
     additionalInfo: service.additionalInfo,
     verifyServiceOk: ok,

@@ -1,23 +1,38 @@
 {
   "name": "ghostprover",
-  "version": "0.1.0",
-  "description": "Privacy-preserving compliance attestation layer for AI inference - ZK proof of non-membership",
+  "version": "0.2.0",
+  "description": "Privacy-preserving compliance attestation layer for AI inference - ZK proof of non-membership with pattern-based detection",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "ghostprover": "./dist/cli.js"
+  },
   "scripts": {
-    "build": "tsc",
-    "sanity-test": "npx tsx src/sanity-test.ts",
-    "test:hashes": "npx tsx src/sanity-test.ts",
+    "build": "tsc && node scripts/copy-registry-assets.mjs",
+    "cli": "node --import tsx src/cli.ts",
+    "daemon": "node --import tsx src/cli.ts daemon",
+    "mcp": "node --import tsx src/cli.ts mcp",
+    "demo:judge": "node --import tsx src/agent/judge-demo.ts",
+    "test:daemon": "node --import tsx src/agent/daemon-test.ts",
+    "test:proof:single": "node --import tsx src/agent/single-proof-test.ts",
+    "sanity-test": "node --import tsx src/sanity-test.ts",
+    "test:hashes": "node --import tsx src/sanity-test.ts",
+    "test:patterns": "node --import tsx src/pattern-sanity-test.ts",
+    "test:scan": "node --import tsx src/batch-scan-test.ts",
+    "circuit:compile": "cd Circuit/ghostprover && nargo compile",
+    "circuit:test": "cd Circuit/ghostprover && nargo test",
     "demo:fixture": "cd Compute && npm run demo:fixture",
     "demo:test": "cd Compute && npm run demo:test"
   },
   "dependencies": {
     "@aztec/bb.js": "^3.0.0-nightly.20260102",
-    "@noir-lang/noir_js": "1.0.0-beta.18",
-    "@noir-lang/noir_wasm": "1.0.0-beta.18",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@noir-lang/noir_js": "^1.0.0-beta.18",
+    "@noir-lang/noir_wasm": "^1.0.0-beta.18",
     "@zkpassport/poseidon2": "^0.6.0",
-    "ethers": "6.13.1"
+    "ethers": "6.13.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

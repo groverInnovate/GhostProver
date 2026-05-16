@@ -2,8 +2,11 @@
   "name": "ghostprover-compute",
   "version": "0.1.0",
   "private": true,
-  "description": "P3 — 0G Compute SDK wiring: run inference against qwen-2.5-7b-instruct on testnet, capture raw response + zerogAuth header + TEE attestation object shape.",
+  "description": "0G Compute Direct wiring for live mainnet inference, TEE attestation capture, and GhostProver receipt orchestration.",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "inference": "tsx src/inference.ts",
     "inference:mock": "tsx src/mock-inference.ts",
@@ -22,8 +25,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@0gfoundation/0g-compute-ts-sdk": "^0.8.3",
     "@0gfoundation/0g-storage-ts-sdk": "^1.2.9",
-    "@0glabs/0g-serving-broker": "^0.4.0",
+    "@0glabs/0g-serving-broker": "^0.7.8",
     "@zkpassport/poseidon2": "^0.6.2",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",

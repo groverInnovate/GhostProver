@@ -11,6 +11,7 @@
  * Usage:
  *   npm run orchestrate -- --target "234567890123" --prompt "Your prompt here"
  *   npm run orchestrate -- --target "ssn" --sample samples/inference-XYZ.log.json
+ *   npm run orchestrate -- --preset saas --sample samples/inference-XYZ.log.json
  *
  * Environment variables:
  *   PRIVATE_KEY       - Wallet for 0G Storage upload + on-chain tx
@@ -34,6 +35,22 @@ let generateProofFn: ((input: { promptBytes: Uint8Array; targetBytes: Uint8Array
   targetHash: string;
   proofTimeMs: number;
 }>) | null = null;
+let generateBatchProofsFn: ((input: {
+  promptBytes: Uint8Array;
+  preset?: string;
+  patternIds?: string[];
+  concurrency?: number;
+}) => Promise<{
+  commitment: string;
+  results: {
+    patternId: string;
+    patternName: string;
+    status: 'done' | 'failed';
+    proof?: { proof: Uint8Array; targetHash: string };
+    error?: string;
+  }[];
+  totalTimeMs: number;
+}>) | null = null;
 
 async function loadProofGenerator() {
   if (generateProofFn) return generateProofFn;
@@ -49,6 +66,18 @@ async function loadProofGenerator() {
   }
 }
 
+async function loadBatchProofGenerator() {
+  if (generateBatchProofsFn) return generateBatchProofsFn;
+  try {
+    const sdk: any = await import('../../dist/index.js');
+    generateBatchProofsFn = sdk.generateBatchProofs;
+    return generateBatchProofsFn;
+  } catch {
+    console.warn('[orchestrator] SDK not built. Run `npm run build` in project root first.');
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -56,12 +85,14 @@ async function loadProofGenerator() {
 const PROMPT_MAX = 512;
 const TARGET_MAX = 32;
 
-const ZG_RPC_URL = process.env.ZG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
+const ZG_RPC_URL = process.env.ZG_RPC_URL ?? 'https://evmrpc.0g.ai';
 const REGISTRY_ADDRESS = process.env.REGISTRY_ADDRESS;
 
 const REGISTRY_ABI = [
   'function submitReceipt(bytes proof, bytes32 commitment, bytes32 targetHash, address providerAddress, string modelId, bytes32 storageRoot) external',
+  'function submitBatchReceipt(bytes[] proofs, bytes32 commitment, bytes32[] targetHashes, address providerAddress, string modelId, bytes32 storageRoot) external',
   'event ComplianceReceiptIssued(bytes32 indexed commitment, bytes32 indexed targetHash, address indexed submitter, address providerAddress, string modelId, bytes32 storageRoot, uint256 timestamp)',
+  'event ComplianceBatchReceiptIssued(bytes32 indexed commitment, bytes32[] targetHashes, address indexed submitter, address providerAddress, string modelId, bytes32 storageRoot, uint256 timestamp)',
 ];
 
 // ---------------------------------------------------------------------------
@@ -102,17 +133,22 @@ function findLatestSample(): string | null {
 // ---------------------------------------------------------------------------
 
 interface OrchestratorInput {
-  target: string;
+  target?: string;
+  preset?: string;
+  patternIds?: string[];
   prompt?: string;
   samplePath?: string;
   skipProof?: boolean;
   skipStorage?: boolean;
   skipOnChain?: boolean;
+  allowUnverified?: boolean;
+  writeProverToml?: boolean;
 }
 
 interface OrchestratorOutput {
   commitment: string;
-  targetHash: string;
+  targetHash: string | null;
+  targetHashes?: string[];
   prompt: string;
   provider: string;
   model: string;
@@ -146,6 +182,48 @@ async function generateZkProof(
     commitment: result.commitment,
     targetHash: result.targetHash,
     proofTimeMs: result.proofTimeMs,
+  };
+}
+
+async function generateZkBatchProofs(
+  promptBytes: Uint8Array,
+  preset?: string,
+  patternIds?: string[],
+): Promise<{
+  proofs: Uint8Array[];
+  commitment: string;
+  targetHashes: string[];
+  proofTimeMs: number;
+}> {
+  const generateBatchProofs = await loadBatchProofGenerator();
+  if (!generateBatchProofs) {
+    throw new Error(
+      'Batch proof generator not available. Build the SDK first:\n' +
+      '  cd /path/to/GhostProver && npm run build',
+    );
+  }
+
+  console.log('[orchestrator] generating batch ZK proofs via SDK...');
+  const result = await generateBatchProofs({
+    promptBytes,
+    preset,
+    patternIds,
+    concurrency: Number(process.env.GHOSTPROVER_PROOF_CONCURRENCY ?? '1'),
+  });
+
+  const failures = result.results.filter((item) => item.status !== 'done');
+  if (failures.length > 0) {
+    throw new Error(
+      'Batch proof generation failed: ' +
+        failures.map((item) => `${item.patternId}: ${item.error ?? 'unknown error'}`).join('; '),
+    );
+  }
+
+  return {
+    proofs: result.results.map((item) => item.proof!.proof),
+    commitment: result.commitment,
+    targetHashes: result.results.map((item) => item.proof!.targetHash),
+    proofTimeMs: result.totalTimeMs,
   };
 }
 
@@ -193,11 +271,56 @@ async function submitOnChain(
   return tx.hash;
 }
 
+async function submitBatchOnChain(
+  proofs: Uint8Array[],
+  commitment: string,
+  targetHashes: string[],
+  provider: string,
+  model: string,
+  storageRoot: string
+): Promise<string> {
+  if (!REGISTRY_ADDRESS) {
+    throw new Error('REGISTRY_ADDRESS not set in environment');
+  }
+
+  const pk = process.env.PRIVATE_KEY;
+  if (!pk) {
+    throw new Error('PRIVATE_KEY required for on-chain submission');
+  }
+
+  const rpcProvider = new ethers.JsonRpcProvider(ZG_RPC_URL);
+  const wallet = new ethers.Wallet(pk, rpcProvider);
+  const registry = new ethers.Contract(REGISTRY_ADDRESS, REGISTRY_ABI, wallet);
+
+  console.log('[orchestrator] submitting batch receipt on-chain...');
+  console.log(`[orchestrator] registry: ${REGISTRY_ADDRESS}`);
+  console.log(`[orchestrator] commitment: ${commitment}`);
+  console.log(`[orchestrator] target hashes: ${targetHashes.length}`);
+  console.log(`[orchestrator] storageRoot: ${storageRoot}`);
+
+  const tx = await registry.submitBatchReceipt(
+    proofs.map((proof) => ethers.hexlify(proof)),
+    commitment,
+    targetHashes,
+    provider || ethers.ZeroAddress,
+    model || '',
+    storageRoot || ethers.ZeroHash
+  );
+
+  await tx.wait();
+  console.log(`[orchestrator] batch receipt submitted: ${tx.hash}`);
+  return tx.hash;
+}
+
 /**
  * Main orchestrator pipeline.
  */
 export async function orchestrate(input: OrchestratorInput): Promise<OrchestratorOutput> {
-  const { target, skipProof, skipStorage, skipOnChain } = input;
+  const { target, preset, patternIds, skipProof, skipStorage, skipOnChain, allowUnverified } = input;
+  const batchMode = Boolean(preset || patternIds?.length);
+  if (!batchMode && !target) {
+    throw new Error('Exact-mode orchestration requires --target, or use --preset/--patterns for batch mode.');
+  }
 
   // Step 1: Load inference log
   let prompt = input.prompt;
@@ -226,44 +349,70 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
 
   // Step 2: Compute commitments
   const { bytes: promptBytes } = padBytes(prompt, PROMPT_MAX);
-  const { bytes: targetBytes } = padBytes(target, TARGET_MAX);
+  const { bytes: targetBytes } = target ? padBytes(target, TARGET_MAX) : { bytes: [] };
   const commitment = toHex32(hashBytes(promptBytes));
-  const targetHash = toHex32(hashBytes(targetBytes));
+  const targetHash = target ? toHex32(hashBytes(targetBytes)) : null;
 
   console.log(`[orchestrator] commitment: ${commitment}`);
-  console.log(`[orchestrator] targetHash: ${targetHash}`);
+  if (targetHash) console.log(`[orchestrator] targetHash: ${targetHash}`);
 
   // Step 3: Verify TEE attestation (if available)
   let attestationValid: boolean | null = null;
+  if (typeof inferenceLog.teeVerified === 'boolean') {
+    attestationValid = inferenceLog.teeVerified as boolean;
+    console.log(`[orchestrator] SDK TEE verification from sample: ${attestationValid}`);
+  }
   if (zerogAuth) {
     const result = verifyInferenceLog(inferenceLog as Parameters<typeof verifyInferenceLog>[0]);
-    attestationValid = result?.valid ?? null;
-    console.log(`[orchestrator] TEE attestation valid: ${attestationValid}`);
+    console.log(`[orchestrator] zerogAuth diagnostic verification: ${result?.valid ?? null}`);
     if (!attestationValid && result?.error) {
       console.warn(`[orchestrator] attestation error: ${result.error}`);
     }
   }
 
-  // Step 4: Write Prover.toml
-  const proverToml = generateProverToml(prompt, target, commitment, targetHash, samplePath ?? 'inline');
-  const proverPath = path.resolve('..', 'Circuit', 'ghostprover', 'Prover.toml');
-  fs.writeFileSync(proverPath, proverToml);
-  console.log(`[orchestrator] wrote ${proverPath}`);
+  const isLiveSample = Boolean(samplePath && !inferenceLog.mock);
+  if (isLiveSample && attestationValid !== true && !allowUnverified) {
+    throw new Error(
+      'Live 0G inference sample is not TEE-verified. Refusing to generate/on-chain-submit ' +
+        'a compliance receipt. Pass --allow-unverified only for diagnostics.',
+    );
+  }
+
+  if (input.writeProverToml && target && targetHash) {
+    const proverToml = generateProverToml(prompt, target, commitment, targetHash, samplePath ?? 'inline');
+    const proverPath = path.resolve('..', 'Circuit', 'ghostprover', 'Prover.toml');
+    fs.writeFileSync(proverPath, proverToml);
+    console.log(`[orchestrator] wrote ${proverPath}`);
+  }
 
   // Step 5: Generate ZK proof
   let proofBytes: Uint8Array | null = null;
+  let batchProofBytes: Uint8Array[] | null = null;
+  let targetHashes: string[] = targetHash ? [targetHash] : [];
   let proofTimeMs: number | null = null;
   if (!skipProof) {
     const promptBytesRaw = new TextEncoder().encode(prompt);
-    const targetBytesRaw = new TextEncoder().encode(target);
-    const result = await generateZkProof(promptBytesRaw, targetBytesRaw);
-    proofBytes = result.proofBytes;
-    proofTimeMs = result.proofTimeMs;
-    // The SDK computes commitment/targetHash internally and they should match
-    if (result.commitment !== commitment || result.targetHash !== targetHash) {
-      console.warn('[orchestrator] commitment mismatch between bridge and SDK!');
-      console.warn(`  bridge: ${commitment} / ${targetHash}`);
-      console.warn(`  SDK:    ${result.commitment} / ${result.targetHash}`);
+    if (batchMode) {
+      const result = await generateZkBatchProofs(promptBytesRaw, preset, patternIds);
+      batchProofBytes = result.proofs;
+      proofTimeMs = result.proofTimeMs;
+      targetHashes = result.targetHashes;
+      if (result.commitment !== commitment) {
+        console.warn('[orchestrator] commitment mismatch between bridge and SDK!');
+        console.warn(`  bridge: ${commitment}`);
+        console.warn(`  SDK:    ${result.commitment}`);
+      }
+    } else {
+      const targetBytesRaw = new TextEncoder().encode(target!);
+      const result = await generateZkProof(promptBytesRaw, targetBytesRaw);
+      proofBytes = result.proofBytes;
+      proofTimeMs = result.proofTimeMs;
+      // The SDK computes commitment/targetHash internally and they should match
+      if (result.commitment !== commitment || result.targetHash !== targetHash) {
+        console.warn('[orchestrator] commitment mismatch between bridge and SDK!');
+        console.warn(`  bridge: ${commitment} / ${targetHash}`);
+        console.warn(`  SDK:    ${result.commitment} / ${result.targetHash}`);
+      }
     }
   }
 
@@ -272,9 +421,11 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   if (!skipStorage) {
     const bundle: AuditBundle = {
       inferenceLog,
-      publicInputs: { commitment, targetHash },
+      publicInputs: { commitment, targetHash: targetHash ?? targetHashes[0] ?? ethers.ZeroHash },
       createdAt: new Date().toISOString(),
       proofHex: proofBytes !== null ? ethers.hexlify(proofBytes) : undefined,
+      proofHexes: batchProofBytes?.map((proof) => ethers.hexlify(proof)),
+      targetHashes,
     };
 
     try {
@@ -283,6 +434,15 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
       console.log(`[orchestrator] storage root: ${storageRoot}`);
     } catch (error) {
       console.warn(`[orchestrator] storage upload failed: ${error}`);
+      const mainnet =
+        process.env.ZG_NETWORK?.toLowerCase() === 'mainnet' ||
+        (ZG_RPC_URL.includes('evmrpc.0g.ai') && !ZG_RPC_URL.includes('testnet'));
+      if (mainnet && process.env.ALLOW_LOCAL_STORAGE_ROOT !== 'true') {
+        throw new Error(
+          '0G Storage upload failed on mainnet; refusing to submit a receipt with a local-only root. ' +
+            'Set ALLOW_LOCAL_STORAGE_ROOT=true only for diagnostics.',
+        );
+      }
       // Compute root locally as fallback
       storageRoot = await computeStorageRoot(bundle);
       console.log(`[orchestrator] computed storage root (not uploaded): ${storageRoot}`);
@@ -291,8 +451,17 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
 
   // Step 7: Submit on-chain receipt
   let txHash: string | null = null;
-  if (!skipOnChain && proofBytes && storageRoot) {
-    try {
+  if (!skipOnChain && storageRoot) {
+    if (batchProofBytes) {
+      txHash = await submitBatchOnChain(
+        batchProofBytes,
+        commitment,
+        targetHashes,
+        provider,
+        model,
+        storageRoot
+      );
+    } else if (proofBytes && targetHash) {
       txHash = await submitOnChain(
         proofBytes,
         commitment,
@@ -301,14 +470,13 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
         model,
         storageRoot
       );
-    } catch (error) {
-      console.warn(`[orchestrator] on-chain submission failed: ${error}`);
     }
   }
 
   return {
     commitment,
     targetHash,
+    targetHashes,
     prompt,
     provider,
     model,
@@ -370,16 +538,20 @@ function generateProverToml(
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv: string[]) {
-  const out: OrchestratorInput = { target: '' };
+  const out: OrchestratorInput = {};
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const v = argv[i + 1];
     if (k === '--target') { out.target = v; i++; }
+    else if (k === '--preset') { out.preset = v; i++; }
+    else if (k === '--patterns') { out.patternIds = v.split(',').map((item) => item.trim()).filter(Boolean); i++; }
     else if (k === '--prompt') { out.prompt = v; i++; }
     else if (k === '--sample') { out.samplePath = v; i++; }
     else if (k === '--skip-proof') { out.skipProof = true; }
     else if (k === '--skip-storage') { out.skipStorage = true; }
     else if (k === '--skip-onchain') { out.skipOnChain = true; }
+    else if (k === '--allow-unverified') { out.allowUnverified = true; }
+    else if (k === '--write-prover-toml') { out.writeProverToml = true; }
   }
   return out;
 }
@@ -387,14 +559,18 @@ function parseArgs(argv: string[]) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  if (!args.target) {
-    console.error('Usage: npm run orchestrate -- --target "<sensitive field>" [options]');
+  if (!args.target && !args.preset && !args.patternIds?.length) {
+    console.error('Usage: npm run orchestrate -- (--target "<sensitive field>" | --preset <preset> | --patterns id,id) [options]');
     console.error('Options:');
     console.error('  --prompt "<text>"     Override prompt (instead of loading from sample)');
     console.error('  --sample <path>       Path to inference log');
+    console.error('  --preset <name>       Generate and submit a batch receipt for a preset');
+    console.error('  --patterns a,b        Generate and submit a batch receipt for pattern IDs');
     console.error('  --skip-proof          Skip ZK proof generation');
     console.error('  --skip-storage        Skip 0G Storage upload');
     console.error('  --skip-onchain        Skip on-chain receipt submission');
+    console.error('  --allow-unverified    Do not block on failed live TEE verification');
+    console.error('  --write-prover-toml   Also write Circuit/ghostprover/Prover.toml');
     process.exit(1);
   }
 

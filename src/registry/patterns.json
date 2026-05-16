@@ -1,0 +1,254 @@
+{
+  "version": "2.0.0",
+  "description": "GhostProver Sensitive Data Pattern Registry",
+  "character_classes": {
+    "EXACT": 0,
+    "DIGIT": 1,
+    "ALPHA_LOWER": 2,
+    "ALPHA_UPPER": 3,
+    "ALPHA": 4,
+    "ALPHANUM": 5,
+    "HEX": 6,
+    "BASE64": 7,
+    "ANY": 8
+  },
+  "patterns": {
+    "in.aadhar": {
+      "name": "Aadhar Number",
+      "description": "12-digit Indian identity number (UIDAI)",
+      "industry": ["india_kyc", "banking", "healthcare", "fintech"],
+      "regulation": "Aadhar Act 2016",
+      "pattern_types": [1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 12,
+      "example": "234567890123"
+    },
+    "in.pan": {
+      "name": "PAN Card",
+      "description": "Indian Permanent Account Number (AAAAA0000A)",
+      "industry": ["india_kyc", "banking", "fintech"],
+      "regulation": "Income Tax Act 1961",
+      "pattern_types": [3,3,3,3,3, 1,1,1,1, 3, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0,0,0, 0,0,0,0, 0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 10,
+      "example": "ABCDE1234F"
+    },
+    "in.passport": {
+      "name": "Indian Passport",
+      "description": "Indian passport number (1 letter + 7 digits)",
+      "industry": ["india_kyc"],
+      "regulation": "Passport Act 1967",
+      "pattern_types": [3,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 8,
+      "example": "A1234567"
+    },
+    "pii.ssn": {
+      "name": "US Social Security Number",
+      "description": "SSN in format XXX-XX-XXXX",
+      "industry": ["banking", "healthcare", "insurance"],
+      "regulation": "Privacy Act 1974",
+      "pattern_types": [1,1,1, 0, 1,1, 0, 1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0, 45, 0,0, 45, 0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 11,
+      "example": "123-45-6789"
+    },
+    "fin.cc16": {
+      "name": "Credit Card Number (16 digits)",
+      "description": "16-digit credit/debit card number",
+      "industry": ["banking", "fintech", "ecommerce"],
+      "regulation": "PCI DSS",
+      "pattern_types": [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 16,
+      "example": "4111111111111111"
+    },
+    "fin.routing": {
+      "name": "US Routing Number",
+      "description": "9-digit ABA routing number",
+      "industry": ["banking", "fintech"],
+      "regulation": "Federal Reserve",
+      "pattern_types": [1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 9,
+      "example": "021000021"
+    },
+    "health.npi": {
+      "name": "NPI (National Provider Identifier)",
+      "description": "10-digit US healthcare provider identifier",
+      "industry": ["healthcare"],
+      "regulation": "HIPAA",
+      "pattern_types": [1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 10,
+      "example": "1234567890"
+    },
+    "health.dea": {
+      "name": "DEA Number",
+      "description": "DEA registration number (2 letters + 7 digits)",
+      "industry": ["healthcare"],
+      "regulation": "DEA Controlled Substances Act",
+      "pattern_types": [3,3, 1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0, 0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 9,
+      "example": "AB1234567"
+    },
+    "tech.aws_key": {
+      "name": "AWS Access Key ID",
+      "description": "AWS IAM access key (AKIA + 16 alphanumeric)",
+      "industry": ["saas", "devops", "cloud"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0, 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5, 0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [65,75,73,65, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 20,
+      "example": "AKIAIOSFODNN7EXAMPLE"
+    },
+    "tech.github_pat": {
+      "name": "GitHub Personal Access Token",
+      "description": "GitHub PAT (ghp_ + 36 alphanumeric)",
+      "industry": ["saas", "devops"],
+      "regulation": "",
+      "pattern_types": [0,0,0,0, 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+      "pattern_values": [103,104,112,95, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZab"
+    },
+    "tech.openai_key": {
+      "name": "OpenAI API Key",
+      "description": "OpenAI key prefix (sk- + 20 alphanumeric)",
+      "industry": ["saas", "ai"],
+      "regulation": "",
+      "pattern_types": [0,0,0, 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5, 0,0,0,0,0,0,0,0,0],
+      "pattern_values": [115,107,45, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0],
+      "target_len": 23,
+      "example": "sk-abc123def456ghi789jkl"
+    },
+    "tech.stripe_key": {
+      "name": "Stripe Secret Key",
+      "description": "Stripe live secret key prefix (sk_live_ + 24 alphanum)",
+      "industry": ["fintech", "ecommerce", "saas"],
+      "regulation": "PCI DSS",
+      "pattern_types": [0,0,0,0,0,0,0,0, 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+      "pattern_values": [115,107,95,108,105,118,101,95, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "sk_live_ABCDEFGHIJKLMNOPQRSTUVWx"
+    },
+    "tech.google_api_key": {
+      "name": "Google API Key",
+      "description": "Google API key prefix (AIza + 28 alphanumeric)",
+      "industry": ["saas", "devops", "cloud"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+      "pattern_values": [65,73,122,97,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "AIzaSyDExampleGoogleApiKey1234"
+    },
+    "tech.slack_token": {
+      "name": "Slack Bot/User Token",
+      "description": "Slack token prefix (xoxb- + 27 alphanumeric)",
+      "industry": ["saas", "devops"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0,0,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+      "pattern_values": [120,111,120,98,45,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "xoxb-1234567890abcdefABCDEF1"
+    },
+    "tech.jwt": {
+      "name": "JSON Web Token Header",
+      "description": "JWT-like token beginning with eyJ",
+      "industry": ["saas", "ai", "devops"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7],
+      "pattern_values": [101,121,74,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6Ik"
+    },
+    "tech.bearer_token": {
+      "name": "Bearer Access Token",
+      "description": "Bearer token prefix followed by 25 alphanumeric characters",
+      "industry": ["saas", "ai", "devops"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0,0,0,0,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+      "pattern_values": [66,101,97,114,101,114,32,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "Bearer abc123def456ghi789jkl12"
+    },
+    "in.ifsc": {
+      "name": "Indian IFSC Code",
+      "description": "Indian bank IFSC code (4 uppercase + 0 + 6 alphanumeric)",
+      "industry": ["banking", "fintech", "india_kyc"],
+      "regulation": "RBI KYC",
+      "pattern_types": [3,3,3,3,0,5,5,5,5,5,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0,0,48,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 11,
+      "example": "HDFC0001234"
+    },
+    "tech.postgres_url": {
+      "name": "Postgres Connection URL",
+      "description": "Postgres connection string prefix",
+      "industry": ["saas", "devops", "cloud"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [112,111,115,116,103,114,101,115,58,47,47,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 11,
+      "example": "postgres://"
+    },
+    "pii.phone_in": {
+      "name": "Indian Phone Number",
+      "description": "Indian mobile number with +91 prefix",
+      "industry": ["india_kyc", "telecom"],
+      "regulation": "TRAI",
+      "pattern_types": [0,0,0, 1,1,1,1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [43,57,49, 0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 13,
+      "example": "+919876543210"
+    },
+    "pii.dob_iso": {
+      "name": "Date of Birth (ISO format)",
+      "description": "Date in YYYY-MM-DD format",
+      "industry": ["healthcare", "banking", "insurance"],
+      "regulation": "GDPR / CCPA",
+      "pattern_types": [1,1,1,1, 0, 1,1, 0, 1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0,0, 45, 0,0, 45, 0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 10,
+      "example": "1990-01-15"
+    },
+    "in.voter": {
+      "name": "Indian Voter ID",
+      "description": "Indian EPIC number (3 letters + 7 digits)",
+      "industry": ["india_kyc"],
+      "regulation": "RPA 1950",
+      "pattern_types": [3,3,3, 1,1,1,1,1,1,1, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [0,0,0, 0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 10,
+      "example": "ABC1234567"
+    }
+  },
+  "presets": {
+    "india_kyc": {
+      "name": "India KYC (Know Your Customer)",
+      "description": "Standard Indian identity document patterns",
+      "patterns": ["in.aadhar", "in.pan", "in.passport", "in.voter", "pii.phone_in", "in.ifsc"]
+    },
+    "banking": {
+      "name": "Banking & Finance",
+      "description": "Financial institution compliance patterns",
+      "patterns": ["in.aadhar", "pii.ssn", "fin.cc16", "fin.routing", "pii.dob_iso", "in.ifsc"]
+    },
+    "healthcare": {
+      "name": "Healthcare (HIPAA)",
+      "description": "Healthcare provider compliance patterns",
+      "patterns": ["pii.ssn", "health.npi", "health.dea", "pii.dob_iso", "in.aadhar"]
+    },
+    "fintech": {
+      "name": "Fintech / Payments",
+      "description": "Payment processor compliance patterns",
+      "patterns": ["fin.cc16", "in.aadhar", "in.pan", "tech.stripe_key", "pii.ssn", "in.ifsc"]
+    },
+    "saas": {
+      "name": "SaaS / DevOps",
+      "description": "API key and credential leak prevention",
+      "patterns": ["tech.aws_key", "tech.github_pat", "tech.openai_key", "tech.stripe_key", "tech.google_api_key", "tech.slack_token", "tech.jwt", "tech.bearer_token", "tech.postgres_url"]
+    }
+  }
+}

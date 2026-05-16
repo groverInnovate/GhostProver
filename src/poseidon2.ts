@@ -47,3 +47,35 @@ export function poseidon2HashRaw(bytes: number[]): bigint {
   const fields = bytes.map((b) => BigInt(b));
   return poseidon2Hash(fields);
 }
+
+/**
+ * Poseidon2 hash of 64 field elements (matching circuit's poseidon2_hash_64).
+ * Used for hashing pattern descriptors: pattern_types[32] ++ pattern_values[32].
+ * Output: hex string "0x..." of the BN254 field element.
+ */
+export function poseidon2Hash64(bytes: number[]): string {
+  if (bytes.length !== 64) {
+    throw new Error(`poseidon2Hash64 expects 64 elements, got ${bytes.length}`);
+  }
+  const fields = bytes.map((b) => BigInt(b));
+  const hash = poseidon2Hash(fields);
+  return "0x" + hash.toString(16).padStart(64, "0");
+}
+
+/**
+ * Compute the pattern descriptor hash.
+ * Concatenates pattern_types[32] and pattern_values[32] into a 64-element
+ * array and hashes it. This matches the circuit's target_hash in pattern mode.
+ */
+export function computePatternHash(
+  patternTypes: number[],
+  patternValues: number[]
+): string {
+  if (patternTypes.length !== 32 || patternValues.length !== 32) {
+    throw new Error(
+      `Pattern arrays must be length 32, got types=${patternTypes.length} values=${patternValues.length}`
+    );
+  }
+  const descriptor = [...patternTypes, ...patternValues];
+  return poseidon2Hash64(descriptor);
+}

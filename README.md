@@ -1,54 +1,112 @@
-# GhostProver
+# GhostProver v2 — Generic ZK Compliance Engine
 
-Privacy-preserving proof that a sensitive field (Aadhar number, API key, email) was **not** present in an AI inference prompt.
+An enterprise-grade, privacy-preserving compliance attestation layer for AI inference. 
+
+GhostProver v2 proves that sensitive data (like Aadhar numbers, PAN cards, AWS API keys, or Credit Card numbers) was **not** present in an AI prompt, without revealing the prompt or the sensitive data itself.
+
+## Judge Quickstart
+
+Run the background-agent demo in three terminals:
+
+```bash
+# terminal 1: seed a clean judge-mode audit trail
+npm run demo:judge
+
+# terminal 2: start the local compliance daemon
+npm run daemon
+
+# terminal 3: start the React operator console
+cd Frontend && npm run dev
+```
+
+Open `http://127.0.0.1:5173`, show the seeded receipt history, scan the clean sample, then scan the risk sample. For a real one-pattern proof acceptance run:
+
+```bash
+npm run test:proof:single
+```
 
 ## How it works
 
-A ZK circuit proves three things simultaneously:
+A Zero-Knowledge (Noir) circuit proves:
+1. The prover knows a prompt that hashes to a public **commitment**.
+2. The prover checks the prompt against a generic **pattern** (e.g. `[DIGIT x 12]` for Aadhar).
+3. The pattern does **not** appear anywhere in the prompt.
+4. The pattern descriptor hashes to a public **pattern_hash**.
 
-1. The prover knows a prompt that hashes to a public **commitment**
-2. The prover knows a target field that hashes to a public **target_hash**
-3. The target field does **not** appear as a substring anywhere in the prompt
-
-The result is a cryptographic non-disclosure receipt — verifiable on-chain without revealing either the prompt or the sensitive data.
+The result is a cryptographically verifiable **Batch Compliance Receipt** issued on-chain, proving to auditors that an entire preset of sensitive data classes was blocked from the AI pipeline.
 
 ## Architecture
 
-```
-User prompt (private)  ─┐
-                        ├─► Noir Circuit ─► ZK Proof ─► Verifier.sol ─► On-chain receipt
-Sensitive field (private) ┘
-```
-
-
-## TypeScript SDK Wrapper
-
-GhostProver provides a full-featured TypeScript SDK to seamlessly integrate Zero-Knowledge proofs into your Node.js backend. The SDK handles input padding, aligns exactly with Noir's internal Poseidon2 hashing, and leverages `bb.js` for UltraHonk proof generation.
-
-### SDK Usage
-```typescript
-import { generateProof, verifyProof } from "ghostprover";
-
-// Load your prompt and the sensitive target you want to prove isn't there
-const promptBytes = new TextEncoder().encode("Patient query: high blood pressure symptoms?");
-const targetBytes = new TextEncoder().encode("234567890123");
-
-// Generate ZK Proof & cryptographically sound commitments
-const { proof, publicInputs, commitment, targetHash } = await generateProof({
-  promptBytes,
-  targetBytes
-});
-
-// Verify the ZK Proof locally (or offload the proof to Verifier.sol on-chain)
-const isValid = await verifyProof(proof, publicInputs);
-console.log("Proof verifies successfully:", isValid);
+```mermaid
+flowchart LR
+  User["Developer in Claude Code / Codex / Antigravity"] --> MCP["GhostProver MCP tools"]
+  Console["React operator console"] --> Daemon["Local daemon\nHTTP + SSE"]
+  MCP --> Daemon
+  Daemon --> Policy[".ghostprover.json\npolicy + custom registry"]
+  Policy --> Scan["Pattern scan\nprivate prompt bytes"]
+  Scan -->|Sensitive data found| Block["Block response\npersist blocked job"]
+  Scan -->|Clean prompt| Queue["Background proof job"]
+  Queue --> Batch["Batch prover\nNoir + bb.js"]
+  Batch --> Receipt["Local JSONL receipt\nstorageRoot preview"]
+  Receipt --> Future0G["Future adapter\n0G Storage + Chain"]
+  Daemon --> Console
 ```
 
-### SDK Testing (End-to-End)
-To test the full lifecycle of padding, generating, and verifying a proof locally:
+## Features
+
+- **Generic Pattern Matching**: 9 built-in character classes (`DIGIT`, `ALPHA`, `ALPHANUM`, `BASE64`, etc.) evaluated in-circuit.
+- **Industry Presets**: Built-in registries for `india_kyc`, `banking`, `fintech`, `healthcare`, and `saas`, plus project-local custom registries.
+- **Parallel Batch Prover**: Generates multiple non-inclusion proofs concurrently for a single prompt commitment.
+- **On-chain Batch Receipts**: Smart contract logic (`submitBatchReceipt`) groups all proofs into a single gas-efficient transaction.
+- **Express Middleware**: Drop-in `ghostProverMiddleware()` for automatic AI request interception and background attestation.
+- **Background Agent + MCP**: Local daemon and MCP tools let coding-agent workflows scan, block, prove, and persist local receipts in the background.
+
+## TypeScript SDK & CLI
+
+GhostProver provides a full-featured TypeScript SDK and CLI to seamlessly integrate Zero-Knowledge proofs into your Node.js backend.
+
+### CLI Usage
+The easiest way to integrate GhostProver is via the CLI:
 ```bash
-npm install
-npx tsx src/test-proof.ts
+# Initialize a config file
+npx ghostprover init
+
+# Instantly scan a prompt against an industry preset (Zero-knowledge pre-flight)
+npx ghostprover scan --preset banking --prompt "Patient query: SSN is 123456789"
+
+# Generate parallel ZK Proofs for an entire preset
+npx ghostprover prove --preset saas --prompt "Clean prompt with no API keys"
+
+# Start the local background compliance agent
+npm run daemon
+
+# Start the MCP bridge for Claude Code / Codex / Antigravity-style tools
+npm run mcp
+```
+
+Core docs:
+
+- [`docs/background-agent-workflow.md`](docs/background-agent-workflow.md) — daemon/MCP workflow and flowchart.
+- [`docs/api.md`](docs/api.md) — local daemon API contract.
+- [`docs/mcp-setup.md`](docs/mcp-setup.md) — Claude Code / Codex / Antigravity MCP setup notes.
+- [`docs/demo-script.md`](docs/demo-script.md) — 3-minute judge demo script.
+- [`docs/limitations.md`](docs/limitations.md) — current limitations and winner-track upgrades.
+
+Custom registry examples live in [`examples/custom-registry.json`](examples/custom-registry.json) and [`examples/.ghostprover.custom.example.json`](examples/.ghostprover.custom.example.json).
+
+### Express Middleware
+```typescript
+import express from 'express';
+import { ghostProverMiddleware } from 'ghostprover';
+
+const app = express();
+
+// Automatically intercepts AI prompts, runs a ZK pre-flight scan,
+// and orchestrates background proof generation if the prompt is clean.
+app.use('/v1/chat/completions', ghostProverMiddleware({
+  preset: 'india_kyc',
+  blocking: false // Return response immediately, prove in background
+}));
 ```
 
 
@@ -117,28 +175,67 @@ The local receipt demo is intentionally partial:
 The missing integration step is the eventual binding between the proof
 commitment and a real TEE-attested request identity from 0G Compute.
 
+## 0G mainnet runbook
 
-## Project structure
+Use Node 20+ for the current 0G Compute SDKs.
+
+```bash
+# terminal 1: configure live Compute
+cd Compute
+cp .env.example .env
+# Fill PRIVATE_KEY. Keep ZG_NETWORK=mainnet and ZG_RPC_URL=https://evmrpc.0g.ai.
+npm install
+npm run list-services
+npm run attest
+npm run inference -- "In one sentence, explain zero-knowledge proofs."
+
+# terminal 2: deploy the receipt registry to 0G mainnet
+cd Chain
+forge script script/Deploy0G.s.sol:Deploy0G \
+  --rpc-url https://evmrpc.0g.ai \
+  --private-key $PRIVATE_KEY \
+  --broadcast
+
+# terminal 3: submit a GhostProver receipt for the latest live sample
+cd Compute
+# copy Chain/deployments/0g-mainnet.json registry into REGISTRY_ADDRESS first
+npm run orchestrate -- --preset saas
+```
+
+If an SDK cannot auto-detect mainnet contracts, set `ZG_LEDGER_CA`,
+`ZG_INFERENCE_CA`, and `ZG_FINE_TUNING_CA` in `Compute/.env`. Live receipt
+submission refuses unverified TEE samples unless `--allow-unverified` is passed.
+
 
 ```text
 ├── src/
-│   ├── ghostprover.ts    # Main TypeScript SDK wrapper (`generateProof`, etc.)
+│   ├── ghostprover.ts    # Main SDK wrapper (`generatePatternProof`, etc.)
+│   ├── batch-prover.ts   # Parallel proof orchestration & pre-flight scans
+│   ├── cli.ts            # GhostProver terminal interface
+│   ├── middleware.ts     # Express.js drop-in integration
 │   ├── poseidon2.ts      # Pure TypeScript BN254 zero-knowledge hashing
-│   └── test-proof.ts     # E2E Testing suite for TS Wrapper
+│   ├── registry/         # Industry presets and pattern definitions
+│   └── agent/            # Daemon, MCP bridge, local store, judge/test scripts
 ├── Circuit/ghostprover/
-│   ├── src/main.nr       # ZK circuit (non-inclusion logic + Poseidon2 sponge)
-│   ├── Nargo.toml        # Noir project config
-│   ├── Prover.toml       # Example inputs for local execution
+│   ├── src/main.nr       # ZK circuit (Dual-mode non-inclusion + character classes)
 │   └── target/           # Auto-generated verification keys & Solidity Verifier
-└── package.json          # Node dependencies
-
-Chain/
-├── src/GhostProverRegistry.sol   # Demo-mode receipt registry
-├── script/DeployLocal.s.sol      # Local Anvil deployment script
-└── test/GhostProverRegistry.t.sol # Valid/tamper proof tests
-
-Compute/
-└── src/demo-receipt.ts           # Local proof-to-receipt demo driver
+├── Chain/
+│   ├── src/GhostProverRegistry.sol   # Batch receipt registry
+│   └── test/GhostProverRegistry.t.sol
+├── Frontend/
+│   └── src/              # React operator console connected to the daemon
+├── docs/
+│   ├── background-agent-workflow.md  # Daemon/MCP workflow and flowchart
+│   ├── api.md                       # Local daemon API
+│   ├── mcp-setup.md                 # Coding-agent integration setup
+│   ├── demo-script.md               # Hackathon demo script
+│   └── limitations.md               # Known limitations and next upgrades
+├── examples/
+│   ├── custom-registry.json         # Company-specific registry example
+│   └── .ghostprover.custom.example.json
+└── Compute/
+    ├── src/mock-inference.ts         # TEE envelope simulation
+    └── src/orchestrator.ts           # Full inference + attestation pipeline
 ```
 
 ## License

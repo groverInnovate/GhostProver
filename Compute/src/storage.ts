@@ -18,12 +18,17 @@ import 'dotenv/config';
 import { Indexer, MemData } from '@0gfoundation/0g-storage-ts-sdk';
 import { ethers } from 'ethers';
 
-// 0G Storage indexer endpoints (testnet)
-const INDEXER_URL_TESTNET = process.env.ZG_INDEXER_URL ?? 'https://indexer-storage-testnet-standard.0g.ai';
+const INDEXER_URL_TESTNET = 'https://indexer-storage-testnet-standard.0g.ai';
 const INDEXER_URL_MAINNET = 'https://indexer-storage-turbo.0g.ai';
+const ZG_RPC_URL = process.env.ZG_RPC_URL ?? 'https://evmrpc.0g.ai';
 
-// 0G Chain RPC for storage contract interactions
-const ZG_RPC_URL = process.env.ZG_RPC_URL ?? 'https://evmrpc-testnet.0g.ai';
+function getStorageIndexerUrl(explicit?: string): string {
+  if (explicit) return explicit;
+  if (process.env.ZG_INDEXER_URL) return process.env.ZG_INDEXER_URL;
+  const network = process.env.ZG_NETWORK?.toLowerCase();
+  const mainnetRpc = ZG_RPC_URL.includes('evmrpc.0g.ai') && !ZG_RPC_URL.includes('testnet');
+  return network === 'mainnet' || mainnetRpc ? INDEXER_URL_MAINNET : INDEXER_URL_TESTNET;
+}
 
 export interface AuditBundle {
   /** Original inference log (from samples/inference-*.log.json) */
@@ -37,6 +42,10 @@ export interface AuditBundle {
   createdAt: string;
   /** Optional: raw proof bytes as hex (for full audit trail) */
   proofHex?: string;
+  /** Optional: batch proof bytes as hex strings */
+  proofHexes?: string[];
+  /** Optional: batch target hashes */
+  targetHashes?: string[];
 }
 
 export interface UploadResult {
@@ -70,7 +79,8 @@ export async function uploadAuditBundle(
 
   const provider = new ethers.JsonRpcProvider(ZG_RPC_URL);
   const signer = new ethers.Wallet(pk, provider);
-  const indexer = new Indexer(indexerUrl ?? INDEXER_URL_TESTNET);
+  const resolvedIndexerUrl = getStorageIndexerUrl(indexerUrl);
+  const indexer = new Indexer(resolvedIndexerUrl);
 
   // Serialize bundle to JSON bytes
   const bundleJson = JSON.stringify(bundle, null, 2);
@@ -78,7 +88,7 @@ export async function uploadAuditBundle(
   const memData = new MemData(data);
 
   console.log(`[storage] uploading ${data.length} bytes to 0G Storage...`);
-  console.log(`[storage] indexer: ${indexerUrl ?? INDEXER_URL_TESTNET}`);
+  console.log(`[storage] indexer: ${resolvedIndexerUrl}`);
   console.log(`[storage] rpc: ${ZG_RPC_URL}`);
 
   // Compute Merkle tree (required before upload)
@@ -127,7 +137,7 @@ export async function downloadAuditBundle(
   rootHash: string,
   indexerUrl?: string
 ): Promise<AuditBundle> {
-  const indexer = new Indexer(indexerUrl ?? INDEXER_URL_TESTNET);
+  const indexer = new Indexer(getStorageIndexerUrl(indexerUrl));
 
   console.log(`[storage] downloading ${rootHash}...`);
   const [blob, err] = await indexer.downloadToBlob(rootHash);

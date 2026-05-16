@@ -5,11 +5,9 @@
  * whether the data came from a live testnet TEE or this script.
  *
  * Why this exists:
- *   - Testnet has 0 live providers right now (`listService()` returns []).
- *   - The bundled SDK v0.4.4 has hardcoded testnet contract addresses, so
- *     we cannot switch to mainnet without forking the SDK.
- *   - We still need to unblock Phase 2 (Noir Prover.toml generation, on-chain
- *     receipt submission). The schema is the contract — mock matches it.
+ *   - It keeps the ZK/Storage/Chain pipeline testable without spending mainnet
+ *     0G or depending on provider uptime.
+ *   - The schema is the contract — mock matches the live inference log shape.
  *
  * When real inference comes back, `npm run inference` will overwrite this
  * file with identical-shape output and the bridge keeps working unchanged.
@@ -102,9 +100,8 @@ function main() {
     ts: new Date().toISOString(),
     mock: true,
     mockReason:
-      '0G testnet had no live inference providers at capture time and SDK v0.4.4 does not yet ' +
-      'support mainnet contract addresses. Replace by re-running `npm run inference` once a live ' +
-      'provider is available — the JSON shape is identical.',
+      'Local mock TEE envelope for offline demos. Replace by re-running `npm run inference` ' +
+      'against a live 0G provider — the JSON shape is identical.',
     prompt: PROMPT,
     provider: MOCK_PROVIDER,
     model: MOCK_MODEL,

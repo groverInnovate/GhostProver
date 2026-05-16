@@ -19,14 +19,13 @@ This directory contains the on-chain verification layer for GhostProver. It does
 
 ---
 
-## Current State (as of 29 Apr 2026)
+## Current State
 
 - ✅ `GhostProverRegistry` compiles and is deployed locally on Anvil  
-- ✅ ZK proof verification works end-to-end against the Noir circuit (5/5 tests passing)  
-- ✅ Event shape upgraded to include `providerAddress`, `modelId`, `storageRoot` (ready for 0G Compute wiring)  
+- ✅ ZK proof verification works end-to-end against the Noir circuit (7/7 tests passing)  
+- ✅ Event shape includes `providerAddress`, `modelId`, `storageRoot`, plus batch receipts for presets  
 - ✅ Fixtures in `fixtures/` regenerated and validated against the current circuit  
-- ⬜ Not yet deployed to 0G Chain testnet  
-- ⬜ `providerAddress` / `modelId` / `storageRoot` are zero-valued in demo mode — real 0G integration pending  
+- ✅ Network-neutral 0G deploy script writes `deployments/0g-mainnet.json` on mainnet  
 
 ---
 
@@ -39,9 +38,10 @@ Chain/
 │   └── generated/
 │       └── Verifier.sol          # Auto-generated — do not touch
 ├── script/
-│   └── DeployLocal.s.sol         # Foundry broadcast script for local Anvil
+│   ├── DeployLocal.s.sol         # Foundry broadcast script for local Anvil
+│   └── Deploy0G.s.sol            # Network-neutral 0G deploy script
 ├── test/
-│   └── GhostProverRegistry.t.sol # 5 Forge tests
+│   └── GhostProverRegistry.t.sol # 7 Forge tests
 ├── fixtures/
 │   ├── proof.bin                 # Pre-generated ZK proof (binary)
 │   ├── public_inputs.bin         # 64 bytes: commitment ‖ targetHash
@@ -138,6 +138,19 @@ npm run demo:test
 
 This runs `write-proof-fixture` → `forge test` in one command. Use this to validate end-to-end after any circuit or contract change.
 
+### 5 — Deploy to 0G mainnet
+
+```bash
+cd Chain
+forge script script/Deploy0G.s.sol:Deploy0G \
+  --rpc-url https://evmrpc.0g.ai \
+  --private-key $PRIVATE_KEY \
+  --broadcast
+```
+
+This writes `deployments/0g-mainnet.json`. Copy the `registry` address into
+`Compute/.env` as `REGISTRY_ADDRESS` before running `npm run orchestrate`.
+
 ---
 
 ## What the Tests Cover
@@ -149,6 +162,8 @@ This runs `write-proof-fixture` → `forge test` in one command. Use this to val
 | `testTamperedProofRejected` | Flip one byte in the proof → transaction reverts with `invalid proof` |
 | `testTamperedCommitmentRejected` | XOR one bit on commitment → transaction reverts |
 | `testTamperedTargetHashRejected` | XOR one bit on targetHash → transaction reverts |
+| `testBatchReceiptEmitsEvent` | Valid proof batch emits `ComplianceBatchReceiptIssued` |
+| `testBatchReceiptLengthMismatchRejected` | Mismatched batch arrays revert |
 
 ---
 
@@ -179,11 +194,14 @@ npm run demo:test
 
 ---
 
-## Next Steps (for the team)
+## Mainnet E2E
 
-These are the outstanding items before 0G Chain testnet deployment:
+The Compute layer now passes live provider, model, and 0G Storage root into
+`submitReceipt()` for exact mode and `submitBatchReceipt()` for preset mode.
+Run:
 
-1. **Deploy to 0G testnet** — create `script/Deploy0GTestnet.s.sol` targeting `https://evmrpc-testnet.0g.ai`. Set `PRIVATE_KEY` and run with `--broadcast`.
-2. **Wire real 0G Compute fields** — once `Compute/src/inference.ts` captures a live TEE `providerAddress` and `processResponse` passes, pass those into `submitReceipt` instead of zeros.
-3. **Wire 0G Storage root** — once the Compute layer uploads the audit bundle to 0G Storage and gets back a Merkle root, pass it as `storageRoot`.
-4. **End-to-end integration test** — a single script: prompt → TEE inference → ZK proof → `submitReceipt` on 0G Chain → verify tx on explorer.
+```bash
+cd ../Compute
+npm run inference -- "In one sentence, explain zero-knowledge proofs."
+npm run orchestrate -- --preset saas
+```

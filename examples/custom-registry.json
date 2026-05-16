@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0-acme",
+  "description": "Example company-specific GhostProver pattern registry",
+  "patterns": {
+    "acme.customer_id": {
+      "name": "ACME Customer ID",
+      "description": "Internal customer identifier in format CUST- followed by 8 digits",
+      "industry": ["acme_internal", "support", "crm"],
+      "regulation": "Internal Data Handling Policy",
+      "pattern_types": [0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [67,85,83,84,45,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 13,
+      "example": "CUST-12345678"
+    },
+    "acme.deploy_token": {
+      "name": "ACME Deploy Token",
+      "description": "Internal deployment token prefix gp_live_ plus 24 alphanumeric characters",
+      "industry": ["acme_internal", "devops"],
+      "regulation": "SOC 2",
+      "pattern_types": [0,0,0,0,0,0,0,0,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],
+      "pattern_values": [103,112,95,108,105,118,101,95,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 32,
+      "example": "gp_live_ABCDEFGHIJKLMNOPQRSTUVWX"
+    },
+    "acme.employee_id": {
+      "name": "ACME Employee ID",
+      "description": "Employee identifier in format EMP followed by 6 digits",
+      "industry": ["acme_internal", "hr"],
+      "regulation": "Internal HR Privacy Policy",
+      "pattern_types": [0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "pattern_values": [69,77,80,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+      "target_len": 9,
+      "example": "EMP123456"
+    }
+  },
+  "presets": {
+    "acme_internal": {
+      "name": "ACME Internal",
+      "description": "Example company policy combining internal identifiers and SaaS secrets",
+      "patterns": ["acme.customer_id", "acme.deploy_token", "acme.employee_id", "tech.aws_key", "tech.github_pat"]
+    }
+  }
+}

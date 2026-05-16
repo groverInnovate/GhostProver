@@ -1,8 +1,8 @@
 /**
  * P3 task — 0G Compute SDK wiring.
  *
- * 1. init broker against 0G testnet
- * 2. discover a qwen-2.5-7b-instruct provider (or use PROVIDER_ADDRESS)
+ * 1. init broker against the configured 0G network (mainnet by default)
+ * 2. discover a model provider (or use PROVIDER_ADDRESS)
  * 3. fund + acknowledge
  * 4. POST /chat/completions with a sample prompt
  * 5. dump:
@@ -16,7 +16,15 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { ensureFunded, getBrokerConfig, initBroker, logBrokerContext, pickService } from './broker.js';
+import {
+  ensureFunded,
+  getBrokerConfig,
+  getServiceModel,
+  getServiceProvider,
+  initBroker,
+  logBrokerContext,
+  pickService,
+} from './broker.js';
 
 const PROMPT = process.argv.slice(2).join(' ') ||
   'In one short sentence: what is a zero-knowledge proof?';
@@ -32,18 +40,82 @@ function tryParseZerogAuth(raw: string | null): unknown {
   return raw;
 }
 
+function completionUrl(endpoint: string): string {
+  const clean = endpoint.replace(/\/+$/, '');
+  if (clean.endsWith('/chat/completions')) return clean;
+  return `${clean}/chat/completions`;
+}
+
+async function getInferenceHeaders(broker: any, providerAddress: string, body: string) {
+  const fn = broker.inference.getRequestHeaders;
+  if (typeof fn !== 'function') {
+    throw new Error('broker.inference.getRequestHeaders is not available on this 0G SDK.');
+  }
+
+  // Newer SDKs generate provider-scoped session tokens with one argument.
+  // Older @0glabs/0g-serving-broker versions require the request body for billing headers.
+  if (fn.length <= 1) {
+    return await fn.call(broker.inference, providerAddress);
+  }
+  return await fn.call(broker.inference, providerAddress, body);
+}
+
+async function verifyProviderService(broker: any, providerAddress: string): Promise<boolean | null> {
+  const fn = broker.inference.verifyService;
+  if (typeof fn !== 'function') {
+    console.warn('[verifyService] not available on this SDK');
+    return null;
+  }
+  try {
+    const ok = await fn.call(broker.inference, providerAddress);
+    console.log('[verifyService] provider TEE verification =', ok);
+    return Boolean(ok);
+  } catch (e: any) {
+    console.warn('[verifyService] failed:', e?.message ?? e);
+    return false;
+  }
+}
+
+async function processInferenceResponse(
+  broker: any,
+  sdk: { packageName: string; packageVersion: string },
+  providerAddress: string,
+  responseContent: string,
+  chatID?: string,
+): Promise<boolean | null> {
+  const fn = broker.inference.processResponse;
+  if (typeof fn !== 'function') {
+    console.warn('[processResponse] not available on this SDK');
+    return null;
+  }
+
+  try {
+    const legacyResponseOrder =
+      sdk.packageName === '@0glabs/0g-serving-broker' &&
+      /^0\.[0-4]\./.test(sdk.packageVersion);
+    if (legacyResponseOrder) {
+      return await fn.call(broker.inference, providerAddress, responseContent, chatID);
+    }
+    return await fn.call(broker.inference, providerAddress, chatID, responseContent);
+  } catch (e: any) {
+    console.warn('[processResponse] failed:', e?.message ?? e);
+    return false;
+  }
+}
+
 async function main() {
   const ctx = await initBroker();
-  const { broker, wallet } = ctx;
+  const { broker, wallet, sdk } = ctx;
   console.log('[wallet]', await wallet.getAddress());
   await logBrokerContext(ctx);
   console.log('[config]', getBrokerConfig());
 
   const service = await pickService(broker);
-  const providerAddress: string = service.provider;
-  console.log('[service]', { provider: providerAddress, model: service.model, url: service.url });
+  const providerAddress = getServiceProvider(service);
+  console.log('[service]', { provider: providerAddress, model: getServiceModel(service), url: service.url ?? service.endpoint });
 
   await ensureFunded(broker, providerAddress);
+  const providerVerified = await verifyProviderService(broker, providerAddress);
 
   const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
   console.log('[metadata]', { endpoint, model });
@@ -51,13 +123,16 @@ async function main() {
   const body = JSON.stringify({
     model,
     messages: [{ role: 'user', content: PROMPT }],
+    max_tokens: 96,
+    temperature: 0.2,
   });
 
-  const headers = await broker.inference.getRequestHeaders(providerAddress, body);
+  const headers = await getInferenceHeaders(broker, providerAddress, body);
   console.log('[request-headers]', Object.keys(headers));
 
   const t0 = Date.now();
-  const res = await fetch(`${endpoint}/chat/completions`, {
+  const url = completionUrl(endpoint);
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body,
@@ -81,18 +156,21 @@ async function main() {
   console.log('\n=== zerogAuth (parsed) ===');
   console.dir(zerogAuth, { depth: null });
 
-  // chatID is either a response header (ZG-Res-Key) or .id on the body
+  // For verifiable 0G responses the SDK expects ZG-Res-Key first; completion
+  // id is only a fallback for providers that omit the header.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chatID: string | undefined = (data as any)?.id ?? resHeaders['zg-res-key'] ?? resHeaders['ZG-Res-Key'];
+  const chatID: string | undefined = resHeaders['zg-res-key'] ?? resHeaders['ZG-Res-Key'] ?? (data as any)?.id;
+  const responseContent: string =
+    typeof (data as any)?.usage === 'object'
+      ? JSON.stringify((data as any).usage)
+      : typeof data === 'string'
+        ? data
+        : String((data as any)?.choices?.[0]?.message?.content ?? text);
 
   let verified: boolean | null = null;
   if (chatID) {
-    try {
-      verified = await broker.inference.processResponse(providerAddress, chatID);
-      console.log('\n[processResponse] TEE signature valid =', verified);
-    } catch (e: any) {
-      console.warn('[processResponse] failed:', e?.message ?? e);
-    }
+    verified = await processInferenceResponse(broker, sdk, providerAddress, responseContent, chatID);
+    console.log('\n[processResponse] TEE signature valid =', verified);
   } else {
     console.warn('[processResponse] no chatID on response, skipping');
   }
@@ -103,11 +181,13 @@ async function main() {
     provider: providerAddress,
     model,
     endpoint,
+    url,
     elapsedMs,
     request: { headers: Object.keys(headers), body: JSON.parse(body) },
     response: { status: res.status, headers: resHeaders, body: data },
     zerogAuth: { raw: zerogAuthRaw, parsed: zerogAuth },
     chatID: chatID ?? null,
+    providerVerified,
     teeVerified: verified,
   };
 
@@ -116,6 +196,7 @@ async function main() {
   const file = path.join(dir, `inference-${Date.now()}.log.json`);
   fs.writeFileSync(file, JSON.stringify(out, null, 2));
   console.log(`\n[saved] ${file}`);
+  broker.inference.stopAutoFunding?.(providerAddress);
 }
 
 main().catch((e) => {

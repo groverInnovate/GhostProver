@@ -16,6 +16,10 @@ contract GhostProverRegistryTest is Test {
     bytes32 internal constant RECEIPT_EVENT_SIG =
         keccak256("ComplianceReceiptIssued(bytes32,bytes32,address,address,string,bytes32,uint256)");
 
+    bytes32 internal constant BATCH_RECEIPT_EVENT_SIG =
+        keccak256("ComplianceBatchReceiptIssued(bytes32,bytes32[],address,address,string,bytes32,uint256)");
+
+
     function setUp() public {
         verifier = new HonkVerifier();
         registry = new GhostProverRegistry(address(verifier));
@@ -102,5 +106,36 @@ contract GhostProverRegistryTest is Test {
         (bool success,) =
             address(registry).call(abi.encodeCall(registry.submitReceipt, (proof, commitment, badTargetHash, address(0), "", bytes32(0))));
         require(!success, "tampered target hash should fail");
+    }
+
+    function testBatchReceiptEmitsEvent() public {
+        bytes[] memory proofs = new bytes[](2);
+        proofs[0] = proof;
+        proofs[1] = proof;
+
+        bytes32[] memory targetHashes = new bytes32[](2);
+        targetHashes[0] = targetHash;
+        targetHashes[1] = targetHash;
+
+        vm.recordLogs();
+        registry.submitBatchReceipt(proofs, commitment, targetHashes, address(0), "", bytes32(0));
+
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        require(entries.length == 1, "expected one log");
+        require(entries[0].topics[0] == BATCH_RECEIPT_EVENT_SIG, "wrong event");
+        require(entries[0].topics[1] == commitment, "wrong commitment");
+    }
+
+    function testBatchReceiptLengthMismatchRejected() public {
+        bytes[] memory proofs = new bytes[](2);
+        proofs[0] = proof;
+        proofs[1] = proof;
+
+        bytes32[] memory targetHashes = new bytes32[](1);
+        targetHashes[0] = targetHash;
+
+        (bool success,) =
+            address(registry).call(abi.encodeCall(registry.submitBatchReceipt, (proofs, commitment, targetHashes, address(0), "", bytes32(0))));
+        require(!success, "length mismatch should fail");
     }
 }
