@@ -9,7 +9,7 @@
     "ghostprover": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-registry-assets.mjs",
     "cli": "node --import tsx src/cli.ts",
     "daemon": "node --import tsx src/cli.ts daemon",
     "mcp": "node --import tsx src/cli.ts mcp",

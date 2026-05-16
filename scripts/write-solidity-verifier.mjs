@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Barretenberg, UltraHonkBackend } from '@aztec/bb.js';
+import { BackendType, Barretenberg, UltraHonkBackend } from '@aztec/bb.js';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const circuit = JSON.parse(
@@ -10,7 +10,10 @@ const circuit = JSON.parse(
 
 console.log('[verifier] generating Solidity verifier for current circuit artifact');
 
-const api = await Barretenberg.new();
+const api = await Barretenberg.new({
+  backend: BackendType.Wasm,
+  threads: 1,
+});
 try {
   const backend = new UltraHonkBackend(circuit.bytecode, api);
   const vk = await backend.getVerificationKey({ verifierTarget: 'evm' });

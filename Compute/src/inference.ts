@@ -123,6 +123,8 @@ async function main() {
   const body = JSON.stringify({
     model,
     messages: [{ role: 'user', content: PROMPT }],
+    max_tokens: 96,
+    temperature: 0.2,
   });
 
   const headers = await getInferenceHeaders(broker, providerAddress, body);
@@ -154,9 +156,10 @@ async function main() {
   console.log('\n=== zerogAuth (parsed) ===');
   console.dir(zerogAuth, { depth: null });
 
-  // chatID is either a response header (ZG-Res-Key) or .id on the body
+  // For verifiable 0G responses the SDK expects ZG-Res-Key first; completion
+  // id is only a fallback for providers that omit the header.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const chatID: string | undefined = (data as any)?.id ?? resHeaders['zg-res-key'] ?? resHeaders['ZG-Res-Key'];
+  const chatID: string | undefined = resHeaders['zg-res-key'] ?? resHeaders['ZG-Res-Key'] ?? (data as any)?.id;
   const responseContent: string =
     typeof (data as any)?.usage === 'object'
       ? JSON.stringify((data as any).usage)
@@ -193,6 +196,7 @@ async function main() {
   const file = path.join(dir, `inference-${Date.now()}.log.json`);
   fs.writeFileSync(file, JSON.stringify(out, null, 2));
   console.log(`\n[saved] ${file}`);
+  broker.inference.stopAutoFunding?.(providerAddress);
 }
 
 main().catch((e) => {

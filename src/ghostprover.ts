@@ -107,6 +107,13 @@ function hexToField(hex: string): string {
   return hex.startsWith("0x") ? hex : "0x" + hex;
 }
 
+function proofForSolidityVerifier(proof: { proof: Uint8Array; publicInputs?: unknown[] }): Uint8Array {
+  // Keep the proof in the raw bb.js EVM format. The Solidity verifier in
+  // Chain/src/generated/Verifier.sol is generated from the same bb.js version
+  // and expects this exact byte layout.
+  return proof.proof;
+}
+
 async function createBarretenberg() {
   return Barretenberg.new({
     backend: BackendType.Wasm,
@@ -206,13 +213,14 @@ export async function generateProof(
     // the Solidity verifier produced by `bb write_solidity_verifier -t evm`.
     console.log("[GhostProver] Generating proof...");
     const proof = await backend.generateProof(witness, { verifierTarget: "evm" });
+    const evmProof = proofForSolidityVerifier(proof);
     const proofTimeMs = Date.now() - startTime;
 
     console.log(`[GhostProver] Proof generated in ${proofTimeMs}ms`);
-    console.log(`[GhostProver] Proof size: ${proof.proof.length} bytes`);
+    console.log(`[GhostProver] Proof size: ${evmProof.length} bytes`);
 
     return {
-      proof: proof.proof,
+      proof: evmProof,
       publicInputs: [commitment, targetHash],
       commitment,
       targetHash,
@@ -298,13 +306,14 @@ export async function generatePatternProof(
     const backend = new UltraHonkBackend(circuit.bytecode, api);
     console.log(`[GhostProver:${label}] Generating proof...`);
     const proof = await backend.generateProof(witness, { verifierTarget: "evm" });
+    const evmProof = proofForSolidityVerifier(proof);
     const proofTimeMs = Date.now() - startTime;
 
     console.log(`[GhostProver:${label}] Proof generated in ${proofTimeMs}ms`);
-    console.log(`[GhostProver:${label}] Proof size: ${proof.proof.length} bytes`);
+    console.log(`[GhostProver:${label}] Proof size: ${evmProof.length} bytes`);
 
     return {
-      proof: proof.proof,
+      proof: evmProof,
       publicInputs: [commitment, patternHash],
       commitment,
       targetHash: patternHash,
