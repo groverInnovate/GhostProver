@@ -8,33 +8,34 @@
   <a href="./README.md">English</a> | <a href="./README.zh-CN.md">简体中文</a>
 </p>
 
-GhostProver is a compliance product for AI inference.
+GhostProver is a compliance layer for AI inference.
 
-It proves that sensitive data such as Aadhaar numbers, PAN cards, API keys, credit card numbers, and other regulated identifiers were **not** present in an AI prompt, without revealing the prompt itself.
+It proves that sensitive data — such as Aadhaar numbers, PAN cards, API keys, credit card numbers, and other regulated identifiers — was **not** present in an AI prompt, without revealing the prompt itself.
 
-The result is a verifiable compliance receipt that can be reviewed internally, archived, and submitted on-chain.
+The output is a verifiable compliance receipt that can be reviewed internally, stored on 0G Storage, and settled on 0G Chain. Every receipt ties together the original inference run, the TEE provider that executed it, and the ZK proof of non-inclusion — creating an end-to-end compliance record that any third party can independently verify.
 
-## Judge Quickstart
+## Quickstart
 
-Run the background-agent demo in three terminals:
+Requires Node ≥ 20.19.0. Run `nvm use` first (`.nvmrc` pins `23.11.1`).
+
+Run the full demo in three terminals:
 
 ```bash
 nvm use
 
-# terminal 1: seed a clean judge-mode audit trail
+# terminal 1 — seed a judge-mode audit trail with sample receipts
 npm run demo:judge
 
-# terminal 2: start the local compliance daemon
+# terminal 2 — start the local compliance daemon
 npm run daemon
 
-# terminal 3: start the React operator console
-cd Frontend
-npm run dev
+# terminal 3 — start the React operator console
+cd Frontend && npm run dev
 ```
 
-Open `http://127.0.0.1:5173`, inspect the seeded receipt history, scan the clean sample, then scan the risk sample.
+Open `http://127.0.0.1:5173` to inspect the seeded receipt history, scan the clean sample, and scan the risk sample.
 
-For a real one-pattern proof acceptance run:
+To run a real end-to-end ZK proof acceptance test (single pattern):
 
 ```bash
 npm run test:proof:single
@@ -42,14 +43,14 @@ npm run test:proof:single
 
 ## What GhostProver Proves
 
-At the core of GhostProver is a Noir circuit that proves:
+At the core of GhostProver is a **Noir circuit** that generates a zero-knowledge proof of non-inclusion. The proof shows:
 
-1. the prover knows a prompt that hashes to a public **commitment**
-2. the prompt was checked against a sensitive-data rule
-3. the target string or pattern does **not** appear anywhere in the prompt
-4. the exact rule checked hashes to a public **pattern hash**
+1. The prover knows a prompt that hashes to a public **commitment**.
+2. The prompt was checked against a specific sensitive-data rule.
+3. The target string or pattern does **not** appear anywhere in the prompt.
+4. The exact rule that was checked hashes to a public **pattern hash**.
 
-This gives teams a way to prove a compliance claim about a prompt without exposing the prompt itself.
+No part of the actual prompt is ever revealed. A verifier only sees the commitment, the pattern hash, and whether the proof is valid.
 
 ## Architecture
 
@@ -57,7 +58,7 @@ This gives teams a way to prove a compliance claim about a prompt without exposi
 
 ## Visual Overview
 
-The repository now includes presentation-ready diagram assets under [`docs/assets/`](docs/assets/README.md) for explaining the system at a glance.
+Presentation-ready diagram assets are available under [`docs/assets/`](docs/assets/README.md).
 
 ### Single Prompt Decision Flow
 
@@ -69,118 +70,140 @@ The repository now includes presentation-ready diagram assets under [`docs/asset
 
 ## Product Capabilities
 
-- **Pattern-Based Detection**: 9 built-in character classes such as `DIGIT`, `ALPHA`, `ALPHANUM`, `HEX`, and `BASE64` are evaluated in-circuit.
-- **Industry Presets**: bundled registries for `india_kyc`, `banking`, `fintech`, `healthcare`, and `saas`, plus support for custom company registries.
-- **Batch Proof Generation**: multiple non-inclusion proofs can be generated concurrently for a single prompt commitment.
-- **On-Chain Receipts**: smart contract logic supports both single and batch receipt submission.
-- **Developer Integration Surface**: TypeScript SDK, CLI, and Express middleware for application teams.
-- **Agent Workflow Support**: a local daemon, MCP bridge, and operator console for coding-agent and internal review workflows.
+| Feature | Detail |
+|---|---|
+| **Pattern-based detection** | 9 built-in character classes (`DIGIT`, `ALPHA`, `ALPHANUM`, `HEX`, `BASE64`, and more) evaluated directly inside the Noir circuit |
+| **15 sensitive-data patterns** | Grouped into 5 industry presets: `india_kyc`, `banking`, `fintech`, `healthcare`, and `saas` |
+| **Custom registries** | Teams can define their own company-specific pattern sets via a JSON config |
+| **Batch proof generation** | Multiple non-inclusion proofs run concurrently for a single prompt commitment |
+| **Single and batch on-chain receipts** | Both `submitReceipt` and `submitBatchReceipt` are supported on-chain, reducing gas for preset-wide submissions |
+| **TypeScript SDK and CLI** | Drop-in integration for Node.js apps via `npm install ghostprover` or `npx ghostprover` |
+| **Express middleware** | One-line intercept for any Express-based AI gateway |
+| **Local daemon and MCP bridge** | Background agent support for Claude Code, Codex-style tools, and internal operator consoles |
+| **Self-contained frontend** | The React dashboard ships with a JS-side pre-flight scanner — no daemon needed for basic scans |
 
 ## How GhostProver Uses 0G
 
-GhostProver uses the 0G stack as the execution, storage, and receipt backbone for the product.
+GhostProver treats the 0G stack as its execution, storage, and settlement backbone. The three layers work together to turn a single compliance check into a permanent, independently verifiable record.
 
-### 1. 0G Private Compute / Compute Network
+### 1. Why the 0G pairing matters
 
-The Compute integration runs inference through 0G-backed infrastructure and captures the TEE-related metadata used by the compliance flow.
+GhostProver is not just a proof library, and not just a TEE wrapper.
 
-In the repository, the `Compute/` workspace handles:
+The product combines all three 0G layers into a single product flow:
 
-- live and mock inference capture
-- provider discovery and attestation inspection
-- request and response logging
-- orchestration of the prompt -> proof -> receipt pipeline
+- **0G Compute** → verifiable inference context (who ran it, on what model, inside a TEE)
+- **Zero-knowledge proofs** → privacy-preserving compliance claims (no prompt exposure)
+- **0G Storage** → durable, retrievable audit archival
+- **0G Chain** → immutable, independently verifiable receipt settlement
+
+Together they turn a one-time prompt-compliance check into a reusable compliance record that any regulator, auditor, or counterparty can verify without ever seeing the original prompt.
+
+## Deployed Contracts — 0G Mainnet
+
+| Contract | Address |
+|---|---|
+| `GhostProverRegistry` | [`0x9595BD4e6b868C64001904EeF76d838D78604B6e`](https://chainscan.0g.ai/address/0x9595BD4e6b868C64001904EeF76d838D78604B6e) |
+| `Verifier` (Honk, auto-generated) | [`0x17B9D7B36Bf6E77F7dbc010B4B2be662A3f1dF78`](https://chainscan.0g.ai/address/0x17B9D7B36Bf6E77F7dbc010B4B2be662A3f1dF78) |
+
+- **Network**: 0G Mainnet (`https://evmrpc.0g.ai`)
+- **Deployment record**: [`Chain/deployments/0g-mainnet.json`](Chain/deployments/0g-mainnet.json)
+- **Live receipt transactions**: [`docs/mainnet-receipts.md`](docs/mainnet-receipts.md)
+
+To submit a receipt against the live registry, set `REGISTRY_ADDRESS` in `Compute/.env` to the `GhostProverRegistry` address above and follow the [0G Mainnet Runbook](#0g-mainnet-runbook).
+
+### 2. 0G Compute
+
+GhostProver runs AI inference through 0G Compute and captures the TEE-attested execution context. This gives each compliance receipt a verifiable link to the specific provider and model that handled the prompt.
+
+The `Compute/` workspace handles:
+
+- Live and mock inference capture
+- Provider discovery and attestation inspection
+- Request and response logging
+- Full orchestration of the prompt → proof → receipt pipeline
 
 Key files:
 
-- [`Compute/src/inference.ts`](Compute/src/inference.ts)
-- [`Compute/src/attestation.ts`](Compute/src/attestation.ts)
-- [`Compute/src/verify-attestation.ts`](Compute/src/verify-attestation.ts)
-- [`Compute/src/orchestrator.ts`](Compute/src/orchestrator.ts)
+| File | Role |
+|---|---|
+| [`Compute/src/inference.ts`](Compute/src/inference.ts) | Live 0G Compute inference calls |
+| [`Compute/src/mock-inference.ts`](Compute/src/mock-inference.ts) | Mock mode for local demos without a live provider |
+| [`Compute/src/attestation.ts`](Compute/src/attestation.ts) | TEE attestation capture |
+| [`Compute/src/verify-attestation.ts`](Compute/src/verify-attestation.ts) | Attestation verification logic |
+| [`Compute/src/broker.ts`](Compute/src/broker.ts) | 0G serving broker integration |
+| [`Compute/src/bridge.ts`](Compute/src/bridge.ts) | Compute-side bridge for proof and receipt hand-off |
+| [`Compute/src/orchestrator.ts`](Compute/src/orchestrator.ts) | End-to-end pipeline orchestration |
+| [`Compute/src/server.ts`](Compute/src/server.ts) | Standalone Compute API server |
 
-This is where GhostProver collects the inference-side evidence needed to pair TEE-backed execution with ZK compliance proofs.
+### 3. 0G Storage
 
-### 2. 0G Storage
+GhostProver uses 0G Storage to archive the full audit bundle for each inference run. The bundle can include:
 
-GhostProver uses 0G Storage as the archive for audit bundles.
-
-An audit bundle can include:
-
-- the captured inference log
+- The captured inference log
 - TEE-related metadata
-- public proof inputs
-- proof material or proof references
-- timestamps and receipt metadata
+- Public proof inputs
+- Proof material or proof references
+- Timestamps and receipt metadata
 
-The Storage adapter computes or uploads a storage root that can later be referenced by the receipt layer.
+The storage adapter uploads the bundle and returns a Merkle storage root. That root is then written into the on-chain receipt, so anyone can retrieve and verify the full audit trail later.
 
-Key file:
+Key file: [`Compute/src/storage.ts`](Compute/src/storage.ts)
 
-- [`Compute/src/storage.ts`](Compute/src/storage.ts)
+### 4. 0G Chain
 
-### 3. 0G Chain
+0G Chain is the final settlement layer. Once a ZK proof is generated, GhostProver submits it to the on-chain registry. The Solidity verifier checks the proof and emits a compliance receipt event that binds together:
 
-0G Chain is the receipt and settlement layer.
-
-Once a proof is generated, GhostProver submits it to the on-chain registry, where the Solidity verifier checks the proof and emits a compliance receipt event.
-
-That receipt can bind together:
-
-- prompt commitment
-- target or pattern hash
-- provider and model metadata
-- storage root
-- submission timestamp
+- Prompt commitment (Poseidon2 hash)
+- Target or pattern hash
+- 0G Compute provider address
+- Model identifier
+- 0G Storage Merkle root
+- Block timestamp
 
 Key files:
 
-- [`Chain/src/GhostProverRegistry.sol`](Chain/src/GhostProverRegistry.sol)
-- [`Chain/src/generated/Verifier.sol`](Chain/src/generated/Verifier.sol)
-- [`Chain/script/Deploy0G.s.sol`](Chain/script/Deploy0G.s.sol)
+| File | Role |
+|---|---|
+| [`Chain/src/GhostProverRegistry.sol`](Chain/src/GhostProverRegistry.sol) | Main registry contract — single and batch receipt submission |
+| [`Chain/src/generated/Verifier.sol`](Chain/src/generated/Verifier.sol) | Auto-generated Honk verifier derived from the Noir circuit |
+| [`Chain/script/Deploy0G.s.sol`](Chain/script/Deploy0G.s.sol) | Mainnet deploy script |
+| [`Chain/script/Deploy0GTestnet.s.sol`](Chain/script/Deploy0GTestnet.s.sol) | Testnet deploy script |
+| [`Chain/script/DeployLocal.s.sol`](Chain/script/DeployLocal.s.sol) | Local Anvil deploy script |
 
-### 4. Why the 0G pairing matters
-
-GhostProver is not just a proof library and not just a TEE wrapper.
-
-The product combines:
-
-- **0G Compute** for verifiable inference context
-- **Zero-Knowledge proofs** for privacy-preserving compliance claims
-- **0G Storage** for durable audit archival
-- **0G Chain** for independently verifiable receipts
-
-That combination turns a prompt-compliance check into a reusable compliance record.
+`Verifier.sol` is generated output and should not be edited manually.
 
 ## TypeScript SDK and CLI
 
-GhostProver provides a TypeScript SDK and CLI for integrating these checks into Node.js applications and internal tooling.
+GhostProver ships as a TypeScript SDK and CLI for integrating compliance checks into Node.js apps and internal tooling.
 
-### CLI Usage
+### CLI
 
 ```bash
-# Initialize a local config file
+# Set up a local config file
 npx ghostprover init
 
-# Instantly scan a prompt against an industry preset
+# Instantly scan a prompt against an industry preset (fast JS-side check, no ZK)
 npx ghostprover scan --preset banking --prompt "Patient query: SSN is 123456789"
 
-# Generate parallel ZK proofs for an entire preset
+# Generate full ZK proofs for every pattern in a preset (runs in parallel)
 npx ghostprover prove --preset saas --prompt "Clean prompt with no API keys"
 
 # Start the local background compliance daemon
 npm run daemon
 
-# Start the MCP bridge for Claude Code / Codex style tools
+# Start the MCP bridge for Claude Code / Codex-style agent tools
 npm run mcp
 ```
 
-Core documentation:
+Core docs:
 
 - [`docs/background-agent-workflow.md`](docs/background-agent-workflow.md) — daemon and MCP architecture
-- [`docs/api.md`](docs/api.md) — local daemon API contract
-- [`docs/mcp-setup.md`](docs/mcp-setup.md) — MCP setup notes
-- [`docs/demo-script.md`](docs/demo-script.md) — demo walkthrough
+- [`docs/api.md`](docs/api.md) — local daemon HTTP API reference
+- [`docs/mcp-setup.md`](docs/mcp-setup.md) — MCP setup guide
+- [`docs/demo-script.md`](docs/demo-script.md) — step-by-step demo walkthrough
 - [`docs/mainnet-receipts.md`](docs/mainnet-receipts.md) — live 0G mainnet receipt transactions
+- [`docs/limitations.md`](docs/limitations.md) — known constraints and recommended next steps
 
 Custom registry examples:
 
@@ -188,6 +211,8 @@ Custom registry examples:
 - [`examples/.ghostprover.custom.example.json`](examples/.ghostprover.custom.example.json)
 
 ### Express Middleware
+
+Drop GhostProver into any Express-based AI gateway with a single `app.use`:
 
 ```typescript
 import express from 'express';
@@ -201,98 +226,99 @@ app.use('/v1/chat/completions', ghostProverMiddleware({
 }));
 ```
 
-The middleware performs a fast pre-flight scan and can queue background proof generation for clean prompts.
+The middleware runs an instant JS-side pre-flight scan on every request and queues a background ZK proof for clean prompts.
 
 ## Local Daemon and Operator Workflow
 
-GhostProver also ships with a local daemon that acts as the source of truth for:
+GhostProver includes a local daemon that acts as the backend for:
 
-- scans
-- attest requests
-- queued proof jobs
-- persisted receipts
-- live workflow updates over SSE
+- Prompt scans
+- Attest requests (`POST /v1/attest`)
+- Queued ZK proof jobs
+- Persisted receipts (`.ghostprover/receipts.jsonl`)
+- Live workflow updates over SSE
 
-This makes it practical for agent tooling, internal operator consoles, and local compliance workflows without requiring a custom backend from day one.
+This makes it practical for agent tooling, internal operator consoles, and local compliance workflows — no custom backend needed from day one.
 
-Related components:
+When `onChainSubmit` is set to `true` in the config, the daemon delegates final receipt submission to the Compute orchestrator via the 0G adapter. The resulting `txHash`, provider, model, and 0G Storage root are written into the receipts file as a live compliance artifact.
 
-- [`src/agent/daemon.ts`](src/agent/daemon.ts)
-- [`src/agent/mcp-server.ts`](src/agent/mcp-server.ts)
-- [`Frontend/src/App.jsx`](Frontend/src/App.jsx)
+Related source files:
 
-## Noir CLI Quick Start
+- [`src/agent/daemon.ts`](src/agent/daemon.ts) — the HTTP + SSE daemon process
+- [`src/agent/mcp-server.ts`](src/agent/mcp-server.ts) — the MCP tool bridge
+- [`src/agent/zerog-adapter.ts`](src/agent/zerog-adapter.ts) — bridges the daemon to the live 0G Compute pipeline for on-chain submission
+- [`Frontend/src/App.jsx`](Frontend/src/App.jsx) — React operator console
+- [`Frontend/src/scanner.js`](Frontend/src/scanner.js) — JS-side pre-flight scanner (self-contained, no daemon required)
+- [`Frontend/src/registry.js`](Frontend/src/registry.js) — bundled pattern registry for in-browser use
 
-If you want to work directly with the Noir circuit:
+## Noir Circuit Quick Start
+
+To work directly with the Noir circuit (requires `nargo` and the Barretenberg CLI `bb`):
 
 ```bash
-# Prerequisites: nargo and bb / Barretenberg CLI
 cd Circuit/ghostprover
 
-# Run circuit tests
+# Run all 17 circuit tests
 nargo test
 
-# Execute with Prover.toml inputs
+# Execute a proof with the inputs in Prover.toml
 nargo execute
 
-# Generate proof and Solidity verifier
+# Generate a proof and write the Solidity verifier
 bb prove -b ./target/ghostprover.json -w ./target/ghostprover.gz -o ./target --oracle_hash keccak
 bb write_vk -b ./target/ghostprover.json -o ./target --oracle_hash keccak
 bb write_solidity_verifier -k ./target/vk -o ./target/Verifier.sol
 ```
 
-## Contract Receipt Demo
+Pinned toolchain: `nargo` 1.0.0-beta.18, `@aztec/bb.js` 3.0.0-nightly.20260102, Barretenberg CLI 1.0.0-beta.18.
 
-The repository includes a local proof-to-contract demo flow for quickly
-validating the on-chain receipt path before spending 0G mainnet funds.
+## Local Contract Demo
+
+The repository includes a local end-to-end demo that validates the full proof → contract → receipt path before spending real 0G mainnet funds.
 
 ```bash
-# terminal 1
+# terminal 1 — start a local Ethereum node
 anvil
 
-# terminal 2
-cd Compute
-npm run demo:deploy
-
-# terminal 3
-npm run demo:receipt
+# terminal 2 — deploy the registry and verifier contracts locally,
+#               then submit a receipt using the pre-generated proof fixture
+node scripts/demo-deploy.mjs
+node scripts/demo-receipt.mjs
 ```
 
-You can also generate a fresh proof fixture and run the receipt contract tests with:
+To regenerate a fresh proof fixture and re-run all contract tests:
 
 ```bash
-cd Compute
-npm run demo:test
+cd Compute && npm run demo:test
 ```
 
-This covers:
+The test suite covers:
 
-- valid proof acceptance
-- tampered proof rejection
-- tampered commitment rejection
-- tampered target hash rejection
+- Valid proof acceptance
+- Tampered proof rejection
+- Tampered commitment rejection
+- Tampered target hash rejection
+- Batch receipt submission and length mismatch rejection
+- Compute field emission in receipt events (7 tests total, all passing)
 
 ## 0G Mainnet Runbook
 
-For the full live path, use the 0G mainnet runbook below.
-Use Node 20+ for the current 0G Compute tooling.
+For the full live path against the 0G mainnet, follow these steps. Requires Node ≥ 20.19.0 (run `nvm use` from the repo root).
 
-### 1. Configure live Compute
+### Step 1 — Configure live Compute
 
 ```bash
-nvm use
-
-# terminal 1: configure live Compute
 cd Compute
 cp .env.example .env
-# Fill PRIVATE_KEY and mainnet configuration values
+# Add your PRIVATE_KEY and mainnet values to Compute/.env
+
 npm install
-npm run list-services
-npm run attest
+npm run list-services   # browse available 0G Compute providers
+npm run attest          # inspect TEE attestation for the chosen provider
 npm run inference -- "In one sentence, explain zero-knowledge proofs."
 ```
 
-### 2. Deploy the receipt registry to 0G mainnet
+### Step 2 — Deploy the receipt registry to 0G mainnet
 
 ```bash
 cd Chain
@@ -302,91 +328,102 @@ forge script script/Deploy0G.s.sol:Deploy0G \
   --broadcast
 ```
 
-### 3. Submit a GhostProver receipt for the captured sample
+The deployed addresses are written to `Chain/deployments/0g-mainnet.json`.
+
+### Step 3 — Submit a compliance receipt
 
 ```bash
 cd Compute
-# copy Chain/deployments/0g-mainnet.json registry into REGISTRY_ADDRESS first
+# Set REGISTRY_ADDRESS in Compute/.env from the output of Step 2
 npm run orchestrate -- --preset saas
 ```
 
-If an SDK cannot auto-detect the correct chain contracts, set the relevant Compute contract addresses in `Compute/.env`.
+If the SDK cannot auto-detect chain contracts, set the relevant addresses manually in `Compute/.env`.
 
-### 4. Use the React console against 0G mainnet
+### Step 4 — Use the React console against 0G mainnet
 
-The frontend talks to the local `/v1/*` daemon. To make that same UI submit
-through the live 0G pipeline, copy
-[`examples/.ghostprover.mainnet.example.json`](examples/.ghostprover.mainnet.example.json)
-to `.ghostprover.json`, copy
-[`Compute/.env.mainnet.example`](Compute/.env.mainnet.example) to
-`Compute/.env`, set `PRIVATE_KEY`, then run:
+The frontend talks to the local daemon. To connect the UI to the live 0G pipeline:
 
 ```bash
+# From the repo root
+cp examples/.ghostprover.mainnet.example.json .ghostprover.json
+# Set PRIVATE_KEY in Compute/.env (already copied in Step 1)
+
 npm run daemon
-cd Frontend
-npm run dev
+
+# In a new terminal
+cd Frontend && npm run dev
 ```
 
-When `onChainSubmit` is `true`, clean attestations still start from
-`POST /v1/attest`, but the daemon hands final receipt submission to the
-Compute orchestrator and stores the resulting `txHash`, provider, model, and
-0G Storage root in `.ghostprover/receipts.jsonl`. Without `onChainSubmit`, that
-file is only a draft queue/debug cache, not the final compliance artifact.
+With `onChainSubmit: true` in `.ghostprover.json`, every clean attestation that passes the daemon's `/v1/attest` endpoint will be routed through the Compute orchestrator and settled on 0G Chain. The receipt — including `txHash`, provider, model, and 0G Storage root — is appended to `.ghostprover/receipts.jsonl`.
 
 ## Repository Layout
 
 ```text
 ├── src/
-│   ├── ghostprover.ts
-│   ├── batch-prover.ts
-│   ├── cli.ts
-│   ├── middleware.ts
-│   ├── poseidon2.ts
-│   ├── registry/
+│   ├── index.ts               ← SDK public export entry point
+│   ├── ghostprover.ts         ← core scanner and proof engine
+│   ├── batch-prover.ts        ← parallel batch proof runner
+│   ├── cli.ts                 ← CLI (scan, prove, init, daemon, mcp)
+│   ├── middleware.ts           ← Express middleware
+│   ├── poseidon2.ts           ← Poseidon2 hash helper
+│   ├── registry/              ← pattern registry and industry presets
 │   └── agent/
+│       ├── daemon.ts          ← HTTP + SSE compliance daemon
+│       ├── mcp-server.ts      ← MCP tool bridge
+│       ├── zerog-adapter.ts   ← bridges daemon → live 0G pipeline
+│       ├── local-store.ts     ← receipt persistence
+│       └── config.ts          ← config loader
 ├── Circuit/
 │   └── ghostprover/
-│       ├── src/main.nr
-│       └── target/
+│       ├── src/main.nr        ← Noir circuit (dual-mode: exact + pattern)
+│       ├── Prover.toml        ← example circuit inputs
+│       └── target/            ← compiled circuit artifacts
 ├── Chain/
-│   ├── src/GhostProverRegistry.sol
-│   └── test/GhostProverRegistry.t.sol
-├── Compute/
 │   ├── src/
-│   └── reports/
+│   │   ├── GhostProverRegistry.sol
+│   │   └── generated/Verifier.sol
+│   ├── script/
+│   │   ├── Deploy0G.s.sol
+│   │   ├── Deploy0GTestnet.s.sol
+│   │   └── DeployLocal.s.sol
+│   ├── test/GhostProverRegistry.t.sol
+│   ├── fixtures/              ← pre-generated proof and public input binaries
+│   └── deployments/           ← recorded deployment addresses
+├── Compute/
+│   ├── src/                   ← inference, attestation, storage, orchestrator
+│   └── reports/               ← captured inference and attestation reports
 ├── Frontend/
 │   └── src/
-├── docs/
-│   ├── background-agent-workflow.md
-│   ├── api.md
-│   ├── mcp-setup.md
-│   ├── demo-script.md
-│   ├── mainnet-receipts.md
-│   ├── project-plan.md
-│   ├── implementation-log.md
-│   └── handoff-summary.md
-├── examples/
-└── scripts/
+│       ├── App.jsx            ← operator console (React + glassmorphism UI)
+│       ├── scanner.js         ← self-contained JS pre-flight scanner
+│       ├── registry.js        ← bundled pattern registry for in-browser use
+│       └── styles.css
+├── docs/                      ← all project documentation
+├── examples/                  ← sample configs and custom registry templates
+└── scripts/                   ← helper scripts (deploy, fixture, verifier)
 ```
 
 ## Repository Guide
 
-If you are navigating the repository for the first time, these are the most useful entry points:
+If you are reading this for the first time, these are the most useful starting points:
 
 - [`src/README.md`](src/README.md) — TypeScript SDK, CLI, middleware, daemon, and registry overview
 - [`Circuit/README.md`](Circuit/README.md) — Noir circuit workspace overview
-- [`Chain/README.md`](Chain/README.md) — Solidity verifier and receipt registry flow
-- [`Compute/README.md`](Compute/README.md) — 0G Compute, attestation, storage, and orchestration helpers
+- [`Chain/README.md`](Chain/README.md) — Solidity verifier and receipt registry
+- [`Compute/README.md`](Compute/README.md) — 0G Compute, attestation, storage, and orchestration
 - [`Frontend/README.md`](Frontend/README.md) — React operator console overview
-- [`docs/README.md`](docs/README.md) — documentation index
+- [`docs/README.md`](docs/README.md) — full documentation index
 - [`examples/README.md`](examples/README.md) — custom registry and config examples
-- [`scripts/README.md`](scripts/README.md) — repository helper scripts
+- [`scripts/README.md`](scripts/README.md) — helper script reference
 
-Additional project documents:
+Additional documents:
 
 - [`docs/project-plan.md`](docs/project-plan.md) — original build plan and hackathon context
 - [`docs/implementation-log.md`](docs/implementation-log.md) — milestone log and implementation history
-- [`docs/handoff-summary.md`](docs/handoff-summary.md) — concise continuation brief
+- [`docs/handoff-summary.md`](docs/handoff-summary.md) — concise continuation brief for the next developer or agent
+- [`docs/limitations.md`](docs/limitations.md) — known constraints and recommended next improvements
+- [`docs/diagrams.md`](docs/diagrams.md) — detailed Mermaid flow diagrams
 
 ## License
 
