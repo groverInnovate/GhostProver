@@ -270,6 +270,151 @@ Related source files:
 - [`Frontend/src/scanner.js`](Frontend/src/scanner.js) — JS-side pre-flight scanner (self-contained, no daemon required)
 - [`Frontend/src/registry.js`](Frontend/src/registry.js) — bundled pattern registry for in-browser use
 
+## MCP Server
+
+GhostProver ships an [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server so that coding agents — Claude Code, Codex, Cursor, Antigravity, and similar tools — can call GhostProver directly as part of their workflow.
+
+When an agent is about to send a prompt to an AI model, it can call `ghostprover_attest_prompt` first. If the prompt is clean, a background ZK proof job is queued. If it contains sensitive data, the tool returns a blocked result and the agent can refuse to forward the prompt.
+
+### How it works
+
+The MCP server is intentionally thin. It does not store anything itself — it forwards every tool call to the local daemon running at `http://127.0.0.1:8787`. That means the operator console, the MCP client, and any other integration all see the same jobs, receipts, and blocking decisions in real time.
+
+```
+Agent tool call
+    │
+    ▼
+MCP server (stdio)
+    │  forwards via HTTP
+    ▼
+Local daemon (port 8787)
+    │  queues background proof
+    ▼
+ZK proof engine → 0G Storage → 0G Chain
+```
+
+### Starting the MCP server
+
+The daemon must be running first:
+
+```bash
+# terminal 1 — start the compliance daemon
+npm run daemon
+
+# terminal 2 — start the MCP bridge
+npm run mcp
+```
+
+The MCP server communicates over **stdio**, which is how MCP clients (Claude Code, etc.) spawn and talk to it. You do not open it in a browser.
+
+### Available tools
+
+| Tool | What it does |
+|---|---|
+| `ghostprover_status` | Returns daemon health, active policy, the latest proof job, and the latest receipt. Good for a quick sanity check at the start of a session. |
+| `ghostprover_scan_prompt` | Scans a prompt against the configured preset and returns clean or blocked with the matched pattern IDs and byte offsets. Fast — no ZK work. |
+| `ghostprover_attest_prompt` | Scans the prompt, and if clean, queues a background ZK proof job. Returns the job ID so the agent can check progress later. |
+| `ghostprover_get_job` | Fetches a specific proof job by ID — status, proof size, storage root, and any error details. |
+| `ghostprover_list_jobs` | Lists recent proof jobs. Supports optional filters: `limit` and `status` (`queued`, `proving`, `done`, `blocked`, `failed`). |
+| `ghostprover_list_receipts` | Lists locally persisted receipt records from `.ghostprover/receipts.jsonl`. |
+| `ghostprover_list_presets` | Lists all available presets and their pattern IDs so the agent knows what the daemon is configured to check. |
+
+### Example tool calls
+
+**Check if a prompt is safe before sending it:**
+
+```json
+{
+  "tool": "ghostprover_scan_prompt",
+  "input": {
+    "prompt": "Rotate the old deployment secret AKIAIOSFODNN7EXAMPLE",
+    "preset": "saas"
+  }
+}
+```
+
+Result: `Blocked: 1 sensitive pattern(s) detected.`
+
+**Queue a compliance proof for a clean prompt:**
+
+```json
+{
+  "tool": "ghostprover_attest_prompt",
+  "input": {
+    "prompt": "Summarise the quarterly report in three bullet points.",
+    "preset": "india_kyc"
+  }
+}
+```
+
+Result: `Attestation job queued: job_1747399812_a3f9d2`
+
+### Connecting to your agent tool
+
+The MCP server works with any tool that supports the Model Context Protocol over stdio. The config block is the same for all of them — only the file path differs.
+
+**The config block (same everywhere):**
+
+```json
+{
+  "mcpServers": {
+    "ghostprover": {
+      "command": "npm",
+      "args": ["run", "mcp"],
+      "cwd": "/path/to/GhostProver"
+    }
+  }
+}
+```
+
+Replace `/path/to/GhostProver` with the absolute path to wherever you cloned this repo.
+
+---
+
+#### Claude Code
+
+File: `~/.claude/claude_desktop_config.json` or a workspace-level `.mcp.json`
+
+Claude Code spawns the MCP process automatically when you open a session. The GhostProver tools will appear in the tool list.
+
+#### Cursor
+
+File: `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` inside your project
+
+After saving the config, restart Cursor. The tools show up in the AI pane under MCP servers.
+
+#### Windsurf (Codeium)
+
+File: `~/.codeium/windsurf/mcp_config.json`
+
+Windsurf reads this on startup. Reload the window after adding the config.
+
+#### Cline / Continue (VS Code extensions)
+
+Both Cline and Continue support MCP servers through their settings UI or config files. In Cline, go to **MCP Servers → Add Server** and paste the command + args. In Continue, add a `mcpServers` block to your `~/.continue/config.json`.
+
+#### Any other MCP-compatible client
+
+As long as the client supports stdio MCP transport, you can add GhostProver the same way. The command is always `npm run mcp` from the repo root, and the client handles spawning the process.
+
+---
+
+> **Before starting any agent tool**, make sure `npm run daemon` is already running in a separate terminal. If the daemon is not up, every MCP tool call will return a `daemon not reachable` error.
+
+### Custom daemon URL
+
+By default the MCP server connects to `http://127.0.0.1:8787`. To point it at a different host or port, set this before starting:
+
+```bash
+GHOSTPROVER_DAEMON_URL=http://myserver:8787 npm run mcp
+```
+
+### Important note
+
+MCP tools do not automatically intercept every AI prompt. The agent workflow must call `ghostprover_scan_prompt` or `ghostprover_attest_prompt` explicitly before forwarding a prompt to a model. GhostProver does not act as a transparent proxy unless the Express middleware is also in place.
+
+Full setup reference: [`docs/mcp-setup.md`](docs/mcp-setup.md)
+
 ## Noir Circuit Quick Start
 
 To work directly with the Noir circuit (requires `nargo` and the Barretenberg CLI `bb`):
