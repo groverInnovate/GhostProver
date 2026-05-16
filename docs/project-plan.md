@@ -1,4 +1,12 @@
-# GhostProver — Full Project Context
+# GhostProver Project Plan
+
+This document preserves the original project framing, build plan, and hackathon context for GhostProver.
+
+It should be read as a planning and strategy reference rather than the canonical source of truth for the current implementation. For the live product surface, start with [README.md](../README.md).
+
+---
+
+# Full Project Context
 
 ## What we're building
 GhostProver — a privacy-preserving compliance attestation layer for AI inference. It produces a cryptographic non-disclosure receipt: a proof that a specific sensitive field (Aadhar, API key, email, etc.) was not present in an AI query prompt. Built for the 0G APAC Hackathon, Track 5: Privacy & Sovereign Infrastructure. Prize pool $150K, submission deadline May 16 2026.
@@ -115,7 +123,7 @@ The @0glabs/0g-serving-broker SDK's `processResponse(providerAddress, content, c
 - **ZK proof gen too slow**: If >2min, switch to hash-comparison approach
 - **0G Chain testnet flaky**: Keep Hardhat local fork as fallback
 - **zerogAuth format**: SDK handles it — use processResponse
-- **Team coordination**: Daily 15-min EOD sync, single status.md
+- **Team coordination**: Daily 15-min EOD sync, single implementation log
 
 ## Pitch Framework
 

@@ -1,5 +1,13 @@
+# GhostProver Implementation Log
+
+This file is the historical engineering log for GhostProver. It records day-by-day progress, design shifts, and milestone snapshots during the buildout of the project.
+
+For the current product overview, use [README.md](../README.md). For a concise handoff summary, use [handoff-summary.md](handoff-summary.md).
+
+---
+
 ## Updates
-### Update Progress Daily in this Format - Done, Issue Faced, Tomorrow's Plan
+### Progress format: done, issues faced, and next plan
 
 ---
 
@@ -18,7 +26,7 @@
 ### 29 April 2026
 1. Audited and cleaned the entire `Chain/` folder:
    - Deleted hand-rolled `src/Vm.sol` (was duplicating forge-std cheatcodes). Replaced with proper `forge-std/Test.sol` and `forge-std/Script.sol` imports.
-   - Upgraded `GhostProverRegistry.sol`: `submitReceipt` now accepts `providerAddress`, `modelId`, `storageRoot` — the 0G Compute + Storage fields needed for a real compliance receipt. Event shape now matches the `project.md` spec exactly.
+   - Upgraded `GhostProverRegistry.sol`: `submitReceipt` now accepts `providerAddress`, `modelId`, `storageRoot` — the 0G Compute + Storage fields needed for a real compliance receipt. Event shape now matches the project-plan spec exactly.
    - Updated `DeployLocal.s.sol` to inherit `forge-std/Script`.
    - Replaced default Foundry boilerplate `README.md` with project-specific contributor docs.
    - Removed dead `foundry.toml` remapping pointing at the Circuit target directory.
